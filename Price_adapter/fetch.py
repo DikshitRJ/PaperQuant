@@ -1,8 +1,23 @@
+# ...existing code...
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
 import time
+
+def _to_number(val, is_int=False):
+    if pd.isna(val):
+        return None
+    try:
+        if is_int:
+            return int(val)
+        return float(val)
+    except Exception:
+        try:
+            return float(val)
+        except Exception:
+            return None
+
 def current_candle(symbol, interval='1m'):
     try:
         stock = yf.Ticker(symbol)
@@ -17,11 +32,11 @@ def current_candle(symbol, interval='1m'):
         latest_candle = df.iloc[-1]
         candle_data = {
             'symbol': symbol,
-            'open': latest_candle['Open'],
-            'high': latest_candle['High'],
-            'low': latest_candle['Low'],
-            'close': latest_candle['Close'],
-            'volume': latest_candle['Volume'],
+            'open': _to_number(latest_candle['Open']),
+            'high': _to_number(latest_candle['High']),
+            'low': _to_number(latest_candle['Low']),
+            'close': _to_number(latest_candle['Close']),
+            'volume': _to_number(latest_candle['Volume'], is_int=True),
             'timestamp': latest_candle.name.to_pydatetime()
         }
         return candle_data
@@ -53,11 +68,11 @@ def fetch_multiple_candles(symbols, interval='1m', lookback_minutes=3):
                 latest_candle = symbol_data.iloc[-1]
                 data[symbol] = {
                     'symbol': symbol,
-                    'open': latest_candle['Open'],
-                    'high': latest_candle['High'],
-                    'low': latest_candle['Low'],
-                    'close': latest_candle['Close'],
-                    'volume': latest_candle['Volume'],
+                    'open': _to_number(latest_candle['Open']),
+                    'high': _to_number(latest_candle['High']),
+                    'low': _to_number(latest_candle['Low']),
+                    'close': _to_number(latest_candle['Close']),
+                    'volume': _to_number(latest_candle['Volume'], is_int=True),
                     'timestamp': latest_candle.name.to_pydatetime()
                 }
             except KeyError:
