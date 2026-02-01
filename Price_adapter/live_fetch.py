@@ -1,15 +1,19 @@
 import yfinance as yf
-import redis.asyncio as redis
+from diskcache import Cache
+
+def init_cache():
+    # Directory is created automatically if it doesn't exist
+    return Cache("./Temporary/cache_liveprices")
 
 async def main(stocklist):
-    redis_client = redis.from_url("redis://localhost", db=1)
+    cache = init_cache()
 
     async with yf.AsyncWebSocket() as ws:
         await ws.subscribe(stocklist)
         print("Subscribed to symbols:", stocklist)
 
         while True:
-            message = await ws.listen()   # ← THIS is the correct call
+            message = await ws.listen()
 
             if message is None:
                 continue
@@ -17,5 +21,15 @@ async def main(stocklist):
             stock = message["symbol"]
             price = message["price"]
 
-            await redis_client.lpush(f"prices:{stock}", price)
-            await redis_client.ltrim(f"prices:{stock}", 0, 9)
+            cache_key = f"prices:{stock}"
+
+            # Get existing price list (newest first)
+            prices = cache.get(cache_key, [])
+
+            # LPUSH equivalent
+            prices.insert(0, price)
+
+            # LTRIM 0 9 equivalent
+            prices = prices[:10]
+
+            cache.set(cache_key, prices)

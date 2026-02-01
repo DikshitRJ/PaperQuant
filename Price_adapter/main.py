@@ -1,7 +1,7 @@
 import json
 import asyncio
 from fetch import fetch_multiple_candles
-from db_handler import imt_mongo, update_redis_candles
+from db_handler import imt_sqlite, update_diskcache_candles
 from live_fetch import main as live_fetch_main
 
 
@@ -15,11 +15,10 @@ async def periodic_fetch_and_store(stocklist: list[str]):
             updated_prices = fetch_multiple_candles(stocklist, interval='1m', lookback_minutes=3)
 
             # Write to MongoDB
-            imt_mongo(list(updated_prices.values()))
+            imt_sqlite(list(updated_prices.values()))
             for ticker, candle_data in updated_prices.items():
                 candle_data = dict(candle_data)      # shallow copy
-                candle_data.pop("_id", None)          # remove Mongo artifact
-                update_redis_candles(ticker, candle_data)
+                update_diskcache_candles(ticker, candle_data)
 
         except Exception as e:
             print(f"Error during periodic fetch and store: {e}")
@@ -29,7 +28,7 @@ async def periodic_fetch_and_store(stocklist: list[str]):
 
 async def main():
     # Load stocklist safely
-    with open("stocklist.json", "r") as f:
+    with open("./Temporary/stocklist.json", "r") as f:
         stocklist: list[str] = json.load(f)
 
     # Defensive check (optional but recommended)

@@ -1,0 +1,8 @@
+name: /media/dikshitrj/Data/Coding/PaperQuant/venv
+channels:
+  - defaults
+dependencies:
+  - jupyter
+  - yfinance
+  - diskcache
+prefix: /media/dikshitrj/Data/Coding/PaperQuant/venv
