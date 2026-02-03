@@ -1,7 +1,20 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from diskcache import Cache
 import json
+
+
+def _normalize_timestamp(ts):
+    if isinstance(ts, str):
+        ts = datetime.fromisoformat(ts)
+
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    else:
+        ts = ts.astimezone(timezone.utc)
+
+    return ts.replace(second=0, microsecond=0)
+
 
 def imt_sqlite(
     data,
@@ -13,7 +26,6 @@ def imt_sqlite(
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Fixed candle schema
         cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,29 +35,40 @@ def imt_sqlite(
                 low REAL NOT NULL,
                 close REAL NOT NULL,
                 volume INTEGER NOT NULL,
-                timestamp DATETIME NOT NULL,
+                timestamp TEXT NOT NULL,
                 UNIQUE(symbol, timestamp)
             )
         """)
 
         if not data:
-            print("No data to insert.")
-            return None
+            return 0
 
-        rows = [
-            (
+        # ---- DEDUPLICATE IN MEMORY ----
+        seen = set()
+        rows = []
+
+        for d in data:
+            ts = _normalize_timestamp(d["timestamp"]).isoformat()
+            key = (d["symbol"], ts)
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            rows.append((
                 d["symbol"],
                 d["open"],
                 d["high"],
                 d["low"],
                 d["close"],
                 d["volume"],
-                d["timestamp"].isoformat()
-                if isinstance(d["timestamp"], datetime)
-                else d["timestamp"]
-            )
-            for d in data
-        ]
+                ts
+            ))
+
+        if not rows:
+            return 0
+
+        before = conn.total_changes
 
         cursor.executemany(
             f"""
@@ -57,41 +80,45 @@ def imt_sqlite(
         )
 
         conn.commit()
-        return cursor.rowcount
-
-    except Exception as e:
-        print(f"An error occurred while inserting candle data: {e}")
-        raise
+        return conn.total_changes - before
 
     finally:
         if conn:
             conn.close()
 
 
+# ---------------- DISKCACHE ----------------
 
-cache = Cache("./Temporary/cache_candles")  # creates directory automatically
+cache = Cache("./Temporary/cache_candles")
 
-def _json_serializer(obj):
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    raise TypeError(f"Type {type(obj)} not serializable")
 
 def update_diskcache_candles(ticker: str, candle_data: dict):
     try:
         cache_key = f"candles:{ticker}"
-
-        # Load existing list or initialize
         candles = cache.get(cache_key, [])
 
-        candles.append(
-            json.dumps(candle_data, default=_json_serializer)
-        )
+        ts = _normalize_timestamp(candle_data["timestamp"]).isoformat()
+        candle_data = dict(candle_data)
+        candle_data["timestamp"] = ts
 
-        # Keep only last 5 candles
-        candles = candles[-5:]
+        normalized = []
 
-        # Persist back to disk
-        cache.set(cache_key, candles)
+        for c in candles:
+            # Old format (JSON string)
+            if isinstance(c, str):
+                try:
+                    c = json.loads(c)
+                except Exception:
+                    continue
+
+            # New format (dict)
+            if isinstance(c, dict) and c.get("timestamp") != ts:
+                normalized.append(c)
+
+        normalized.append(candle_data)
+        normalized = normalized[-5:]
+
+        cache.set(cache_key, normalized)
 
     except Exception as e:
         print(f"An error occurred while updating DiskCache cache: {e}")

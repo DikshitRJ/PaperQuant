@@ -1,4 +1,3 @@
-venv
-Price_adapter/__pycache__/
-stocklist.json
+.venv/
+*__pycache__*
 Temporary/

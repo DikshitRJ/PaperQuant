@@ -2,7 +2,6 @@ import yfinance as yf
 from diskcache import Cache
 
 def init_cache():
-    # Directory is created automatically if it doesn't exist
     return Cache("./Temporary/cache_liveprices")
 
 async def main(stocklist):
@@ -23,13 +22,10 @@ async def main(stocklist):
 
             cache_key = f"prices:{stock}"
 
-            # Get existing price list (newest first)
             prices = cache.get(cache_key, [])
 
-            # LPUSH equivalent
             prices.insert(0, price)
-
-            # LTRIM 0 9 equivalent
+            
             prices = prices[:10]
 
             cache.set(cache_key, prices)
