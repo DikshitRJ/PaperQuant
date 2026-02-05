@@ -26,12 +26,19 @@ async def periodic_fetch_and_store(stocklist: list[str]):
 async def main():
     with open("./Temporary/stocklist.json", "r") as f:
         stocklist: list[str] = json.load(f)
+    live_task = asyncio.create_task(live_fetch_main(stocklist.copy()))
 
-    assert isinstance(stocklist, list)
-    assert all(isinstance(x, str) for x in stocklist)
-
-    #asyncio.create_task(live_fetch_main(stocklist.copy()))
-    await periodic_fetch_and_store(stocklist.copy())
+    try:
+        await periodic_fetch_and_store(stocklist.copy())
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        print("Main loop interrupted.")
+    finally:
+        print("Cancelling live fetch task...")
+        live_task.cancel()
+        try:
+            await live_task
+        except asyncio.CancelledError:
+            print("Live fetch task successfully killed.")
 
 
 if __name__ == "__main__":
