@@ -1,4 +1,4 @@
-from candle_fetcher import candle_list
+from Candle_fetcher import candle_list
 import pandas as pd
 
 # Moving averages are technical indicators used to smooth out price data over a specific period.

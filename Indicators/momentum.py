@@ -1,4 +1,4 @@
-from candle_fetcher import candle_list
+from Candle_fetcher import candle_list
 import pandas as pd
 import numpy as np
 

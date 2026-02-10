@@ -95,30 +95,13 @@ cache = Cache("./Temporary/cache_candles")
 def update_diskcache_candles(ticker: str, candle_data: dict):
     try:
         cache_key = f"candles:{ticker}"
-        candles = cache.get(cache_key, [])
 
         ts = _normalize_timestamp(candle_data["timestamp"]).isoformat()
         candle_data = dict(candle_data)
         candle_data["timestamp"] = ts
 
-        normalized = []
-
-        for c in candles:
-            # Old format (JSON string)
-            if isinstance(c, str):
-                try:
-                    c = json.loads(c)
-                except Exception:
-                    continue
-
-            # New format (dict)
-            if isinstance(c, dict) and c.get("timestamp") != ts:
-                normalized.append(c)
-
-        normalized.append(candle_data)
-        normalized = normalized[-5:]
-
-        cache.set(cache_key, normalized)
+        # Store only the current candle data as an object
+        cache.set(cache_key, candle_data)
 
     except Exception as e:
         print(f"An error occurred while updating DiskCache cache: {e}")
