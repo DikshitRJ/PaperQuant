@@ -41,16 +41,19 @@ if not logger.handlers:
 from Indicators.Main import indicators as indicators
 
 # -------------------------------------------------
-# ZMQ DEALER setup
+# ZMQ DEALER setup (Async)
 # -------------------------------------------------
 
-_context = zmq.Context.instance()
+import zmq.asyncio
+
+_context = zmq.asyncio.Context.instance()
 _socket = _context.socket(zmq.DEALER)
 
 # Explicit identity for ROUTER
 _socket.setsockopt(zmq.IDENTITY, STRATEGY_ID.encode())
 
-_socket.setsockopt(zmq.RCVTIMEO, 2000)
+# High/Infinite timeout behavior since limit orders block indefinitely
+_socket.setsockopt(zmq.RCVTIMEO, -1)
 _socket.setsockopt(zmq.SNDTIMEO, 2000)
 
 _socket.connect(ZMQ_ENDPOINT)
@@ -127,15 +130,15 @@ class prices:
 
 class action:
     @staticmethod
-    def buy(quantity: int, price=None, symbol: str = SYMBOL):
-        return action._send("buy", symbol, quantity, price)
+    async def buy(quantity: int, price=None, symbol: str = SYMBOL):
+        return await action._send("buy", symbol, quantity, price)
 
     @staticmethod
-    def sell(quantity: int, price=None, symbol: str = SYMBOL):
-        return action._send("sell", symbol, quantity, price)
+    async def sell(quantity: int, price=None, symbol: str = SYMBOL):
+        return await action._send("sell", symbol, quantity, price)
 
     @staticmethod
-    def _send(action_type, symbol, quantity, price):
+    async def _send(action_type, symbol, quantity, price):
         if not isinstance(symbol, str) or not symbol:
             return _error("INVALID_SYMBOL")
 
@@ -155,10 +158,10 @@ class action:
         }
 
         try:
-            _socket.send_json(payload)
-            response = _socket.recv_json()
+            await _socket.send_json(payload)
+            response = await _socket.recv_json()
         except zmq.error.Again:
-            logger.error("Trade adapter timeout")
+            logger.error("Trade adapter send timeout")
             return _error("ENGINE_UNAVAILABLE")
         except Exception as e:
             logger.exception("IPC failure")
