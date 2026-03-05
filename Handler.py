@@ -82,7 +82,8 @@ def _error(code, message=None):
     }
 
 def _now_s():
-    return time.time_s()
+    return time.time()
+
 def _normalize_timestamp(ts):
     if isinstance(ts, str):
         ts = datetime.fromisoformat(ts)
@@ -113,13 +114,14 @@ class prices:
         ts = candle.get("timestamp")
         if ts is not None:
             try:
-                ts = _normalize_timestamp(ts).timestamp()  # Convert to nanoseconds
+                ts = _normalize_timestamp(ts).timestamp()
             except Exception as e:
                 logger.error(f"Failed to normalize timestamp: {e}")
                 return _error("INVALID_TIMESTAMP")
 
             age = _now_s() - ts
-            if age > 60:  # 5 seconds
+            if age > 120:  # Allow 2 minutes for 1m interval safety
+                return _error("STALE_DATA", "Price data is stale")
                 return _error("STALE_DATA", "Price data is stale")
 
         return _ok(candle)

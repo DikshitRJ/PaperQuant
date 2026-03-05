@@ -62,7 +62,7 @@ def log_trade(strategy_id, symbol, action, quantity, price):
             if not file_exists:
                 writer.writerow(['Timestamp', 'Strategy_ID', 'Symbol', 'Action', 'Executed_Quantity', 'Executed_Price'])
             
-            timestamp_str = datetime.utcfromtimestamp(_now_s()).isoformat()
+            timestamp_str = datetime.fromtimestamp(_now_s(), tz=timezone.utc).isoformat()
             writer.writerow([timestamp_str, strategy_id, symbol, action, quantity, price])
     except Exception as e:
         logger.error(f"Failed to write to order history: {e}")
@@ -106,8 +106,9 @@ def update_position(state_cache, strategy_id, symbol, action_type, quantity, exe
     new_avg = current_avg
     if is_increasing_position:
         # Weighted average
-        total_cost = (abs(current_qty) * current_avg) + (quantity * execution_price)
-        new_avg = total_cost / abs(new_qty)
+        if new_qty != 0:
+            total_cost = (abs(current_qty) * current_avg) + (quantity * execution_price)
+            new_avg = total_cost / abs(new_qty)
     elif is_flipping_position:
         # Starting fresh in the other direction
         new_avg = execution_price
@@ -129,7 +130,7 @@ def main():
     logger.info("Initializing Advanced Trade Adapter...")
     
     # Ensure Temp directory exists
-    os.makedirs(os.path.dirname(STATE_CACHE_PATH), exist_ok=True)
+    os.makedirs("./Temporary", exist_ok=True)
     
     # Initialize Diskcache
     logger.info(f"Connecting to State Cache: {STATE_CACHE_PATH}")
@@ -168,41 +169,39 @@ def main():
                     requested_price = order["price"]
                     
                     live_data = liveprices_cache.get(f"prices:{symbol}")
-                    live_price = live_data.get("price") if live_data and isinstance(live_data, dict) else None
+                    live_price = live_data.get("price") if (live_data and isinstance(live_data, dict)) else None
                     
                     executed = False
                     if live_price is not None:
                         if action_type == "buy" and live_price <= requested_price:
-                            with Cache(STATE_CACHE_PATH) as state:
-                                new_qty, new_avg = update_position(state, strategy_id, symbol, "buy", quantity, live_price)
-                                logger.info(f"PENDING BUY EXECUTION: {strategy_id} bought {quantity} {symbol} @ {live_price}. (Limit: {requested_price}) New Pos: {new_qty} (Avg: {new_avg:.2f})")
-                                log_trade(strategy_id, symbol, "buy", quantity, live_price)
-                                response_data = _ok({
-                                    "symbol": symbol,
-                                    "action": "buy",
-                                    "executed_quantity": quantity,
-                                    "executed_price": live_price,
-                                    "current_position": new_qty,
-                                    "current_avg_price": new_avg,
-                                    "ts": _now_s()
-                                })
-                                socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
+                            new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "buy", quantity, live_price)
+                            logger.info(f"PENDING BUY EXECUTION: {strategy_id} bought {quantity} {symbol} @ {live_price}. (Limit: {requested_price}) New Pos: {new_qty} (Avg: {new_avg:.2f})")
+                            log_trade(strategy_id, symbol, "buy", quantity, live_price)
+                            response_data = _ok({
+                                "symbol": symbol,
+                                "action": "buy",
+                                "executed_quantity": quantity,
+                                "executed_price": live_price,
+                                "current_position": new_qty,
+                                "current_avg_price": new_avg,
+                                "ts": _now_s()
+                            })
+                            socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
                             executed = True
                         elif action_type == "sell" and live_price >= requested_price:
-                            with Cache(STATE_CACHE_PATH) as state:
-                                new_qty, new_avg = update_position(state, strategy_id, symbol, "sell", quantity, live_price)
-                                logger.info(f"PENDING SELL EXECUTION: {strategy_id} sold {quantity} {symbol} @ {live_price}. (Limit: {requested_price}) New Pos: {new_qty} (Avg: {new_avg:.2f})")
-                                log_trade(strategy_id, symbol, "sell", quantity, live_price)
-                                response_data = _ok({
-                                    "symbol": symbol,
-                                    "action": "sell",
-                                    "executed_quantity": quantity,
-                                    "executed_price": live_price,
-                                    "current_position": new_qty,
-                                    "current_avg_price": new_avg,
-                                    "ts": _now_s()
-                                })
-                                socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
+                            new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "sell", quantity, live_price)
+                            logger.info(f"PENDING SELL EXECUTION: {strategy_id} sold {quantity} {symbol} @ {live_price}. (Limit: {requested_price}) New Pos: {new_qty} (Avg: {new_avg:.2f})")
+                            log_trade(strategy_id, symbol, "sell", quantity, live_price)
+                            response_data = _ok({
+                                "symbol": symbol,
+                                "action": "sell",
+                                "executed_quantity": quantity,
+                                "executed_price": live_price,
+                                "current_position": new_qty,
+                                "current_avg_price": new_avg,
+                                "ts": _now_s()
+                            })
+                            socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
                             executed = True
                             
                     if not executed:
@@ -231,8 +230,6 @@ def main():
                     # Extract fields
                     action_type = payload.get("action")
                     
-
-
                     # ---------------------------------------------------------
                     # Buy/Sell Logic
                     # ---------------------------------------------------------
@@ -247,7 +244,7 @@ def main():
                         
                     # Fetch immediate live price
                     live_data = liveprices_cache.get(f"prices:{symbol}")
-                    live_price = live_data.get("price") if live_data and isinstance(live_data, dict) else None
+                    live_price = live_data.get("price") if (live_data and isinstance(live_data, dict)) else None
                     
                     response_data = None
                     
@@ -274,9 +271,8 @@ def main():
                         socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
                         continue
                         
-                    with Cache(STATE_CACHE_PATH) as state:
-                        if action_type == "buy":
-                            new_qty, new_avg = update_position(state, strategy_id, symbol, "buy", quantity, execution_price)
+                    if action_type == "buy":
+                        new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "buy", quantity, execution_price)
                             logger.info(f"IMMEDIATE BUY EXECUTION: {strategy_id} bought {quantity} {symbol} @ {execution_price}. New Pos: {new_qty} (Avg: {new_avg:.2f})")
                             log_trade(strategy_id, symbol, "buy", quantity, execution_price)
                             

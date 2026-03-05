@@ -7,29 +7,35 @@ import numpy as np
 
 def swing_high_low(symbol, period, interval):
     """
-    Detect swing highs and lows over a rolling window.
+    Detect the last swing high and low over a rolling window.
     :param symbol: Stock symbol (e.g., "AAPL").
     :param period: Rolling window size.
     :param interval: Interval for the candle data (e.g., "1d").
-    :return: Tuple of swing high and swing low values.
+    :return: Tuple of last identified swing high and swing low values.
     """
-    prices = candle_list(symbol, period, interval, field="close")
+    # Fetch extra data to find peaks/troughs that are fully formed
+    prices = candle_list(symbol, period + 20, interval, field="close")
     if not prices:
-        return None
+        return None, None
         
-    swing_high = pd.Series(prices).rolling(window=period, center=True).max().iloc[-1]
-    swing_low = pd.Series(prices).rolling(window=period, center=True).min().iloc[-1]
-    return swing_high, swing_low
+    series = pd.Series(prices)
+    # Using center=True finds peaks in the middle of a window.
+    # To avoid NaNs at the end, we look for the last non-NaN value.
+    swing_highs = series.rolling(window=period, center=True).max()
+    swing_lows = series.rolling(window=period, center=True).min()
+    
+    # Filter for values that are actual local peaks/troughs
+    last_high = swing_highs.dropna().iloc[-1] if not swing_highs.dropna().empty else None
+    last_low = swing_lows.dropna().iloc[-1] if not swing_lows.dropna().empty else None
+    
+    return last_high, last_low
 
 def choppiness_index(symbol, period, interval):
     """
     Calculate the Choppiness Index.
-    :param symbol: Stock symbol (e.g., "AAPL").
-    :param period: Period for calculation (default 14 in many platforms, but we use 'period').
-    :param interval: Interval for the candle data (e.g., "1d").
-    :return: Choppiness Index value.
     """
-    candles = candle_list(symbol, period, interval, field="all")
+    # Fetch period + 1 to account for the first True Range NaN
+    candles = candle_list(symbol, period + 1, interval, field="all")
     if not candles:
         return None
         
@@ -46,5 +52,7 @@ def choppiness_index(symbol, period, interval):
     range_high = high_ser.rolling(window=period).max()
     range_low = low_ser.rolling(window=period).min()
     
+    # Calculate chop
     chop = 100 * np.log10(sum_tr / (range_high - range_low)) / np.log10(period)
+    
     return chop.iloc[-1]

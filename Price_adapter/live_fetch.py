@@ -13,9 +13,9 @@ async def main(stocklist):
         price = message["price"]
         print("stock:", stock, "\n price:", price)
         cache_key = f"prices:{stock}"
-        prices = cache.get(cache_key, [])
-        prices.insert(0, price)
-        cache.set(cache_key, prices[:10])
+        
+        # Consistent with Trade_adapter's expectation: dict with "price"
+        cache.set(cache_key, {"price": price, "ts": asyncio.get_event_loop().time()})
         #cache.flush()
 
     try:

@@ -7,11 +7,8 @@ import pandas as pd
 def atr(symbol, period, interval):
     """
     Calculate the Average True Range (ATR).
-    :param symbol: Stock symbol (e.g., "AAPL").
-    :param period: Period for the ATR calculation.
-    :param interval: Interval for the candle data (e.g., "1d").
-    :return: ATR value.
     """
+    # Fetch period + 1 for TR diff
     candles = candle_list(symbol, period + 1, interval, field="all")
     if not candles:
         return None
@@ -31,11 +28,6 @@ def atr(symbol, period, interval):
 def bollinger_bands(symbol, period, interval, multiplier=2):
     """
     Calculate Bollinger Bands.
-    :param symbol: Stock symbol (e.g., "AAPL").
-    :param period: Period for the Bollinger Bands calculation.
-    :param interval: Interval for the candle data (e.g., "1d").
-    :param multiplier: Multiplier for the standard deviation (default: 2).
-    :return: Dictionary with upper, middle, and lower bands.
     """
     close = candle_list(symbol, period, interval, field="close")
     if not close:

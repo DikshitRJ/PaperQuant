@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import logging
 
-
 def _to_number(val, is_int=False):
     if pd.isna(val):
         return None
@@ -11,7 +10,6 @@ def _to_number(val, is_int=False):
         return int(val) if is_int else float(val)
     except Exception:
         return None
-
 
 def _normalize_timestamp(ts):
     """
@@ -21,9 +19,7 @@ def _normalize_timestamp(ts):
         ts = ts.replace(tzinfo=timezone.utc)
     else:
         ts = ts.astimezone(timezone.utc)
-
     return ts.replace(second=0, microsecond=0)
-
 
 INTERVAL_TO_DELTA = {
     "1m": timedelta(minutes=1),
@@ -47,23 +43,21 @@ def candle_list(symbol, no_of_candles, interval, field="all"):
             raise ValueError(f"Invalid interval: {interval}")
 
         stock = yf.Ticker(symbol)
-
         now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
 
-        # yfinance candles are closed candles → exclude current forming candle
-        end = now - INTERVAL_TO_DELTA[interval]
-        start = end - INTERVAL_TO_DELTA[interval] * (no_of_candles - 1)
-
-        df = stock.history(interval=interval, start=start, end=end)
+        # Buffer: Fetch 2x + 10 to account for weekends/holidays/gaps
+        buffer_factor = 2.5 if interval in ["1d", "1wk", "1mo"] else 4.0
+        start_date = now - (INTERVAL_TO_DELTA[interval] * int(no_of_candles * buffer_factor + 10))
+        
+        # yfinance history end is exclusive
+        df = stock.history(interval=interval, start=start_date, end=now)
 
         if df.empty:
             logging.warning(f"No data found for symbol: {symbol}")
             return None
 
-        df = df[df.index <= end]
-
-        if df.empty:
-            return None
+        # Ensure we only have the requested number of most recent candles
+        df = df.tail(no_of_candles)
         
         candles = []
         for ts, row in df.iterrows():
