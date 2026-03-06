@@ -120,8 +120,7 @@ class prices:
                 return _error("INVALID_TIMESTAMP")
 
             age = _now_s() - ts
-            if age > 120:  # Allow 2 minutes for 1m interval safety
-                return _error("STALE_DATA", "Price data is stale")
+            if age > 180:  # Allow 2 minutes for 3m interval safety
                 return _error("STALE_DATA", "Price data is stale")
 
         return _ok(candle)
