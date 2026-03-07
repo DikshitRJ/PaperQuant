@@ -21,7 +21,8 @@ def rsi(symbol, period, interval):
     avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
 
     rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs)).iloc[-1]
+    rsi_series = 100 - (100 / (1 + rs))
+    return rsi_series.iloc[-1] if not rsi_series.dropna().empty else None
 
 def stochastic_oscillator(symbol, period, interval, k_period=14, smooth_k=3, smooth_d=3):
     """

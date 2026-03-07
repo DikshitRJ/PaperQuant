@@ -5,7 +5,7 @@ import json
 import uuid
 import logging
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 from diskcache import Cache
 
 # -------------------------------------------------
@@ -53,6 +53,35 @@ def _error(code, message=None):
 
 def _now_s():
     return time.time()
+
+def get_delayed_price(cache, symbol, delay_seconds=60):
+    """
+    Pulls the price from one minute ago (or specified delay).
+    Finds the price just before the target timestamp.
+    """
+    cache_key = f"prices:{symbol}"
+    price_data = cache.get(cache_key, [])
+    
+    if not isinstance(price_data, list) or not price_data:
+        return None
+        
+    target_ts = _now_s() - delay_seconds
+    
+    # price_data is sorted by 'ts' (appended in order)
+    # Find the one just before target_ts
+    selected_price = None
+    for item in price_data:
+        if item["ts"] <= target_ts:
+            selected_price = item["price"]
+        else:
+            # Since it's sorted, once we exceed target_ts, we've found our match
+            break
+            
+    # Fallback: if all are newer than target_ts, return the oldest available
+    if selected_price is None and price_data:
+        selected_price = price_data[0]["price"]
+        
+    return selected_price
 
 def log_trade(strategy_id, symbol, action, quantity, price):
     file_exists = os.path.isfile(ORDER_HISTORY_FILE)
@@ -168,8 +197,7 @@ def main():
                     quantity = order["quantity"]
                     requested_price = order["price"]
                     
-                    live_data = liveprices_cache.get(f"prices:{symbol}")
-                    live_price = live_data.get("price") if (live_data and isinstance(live_data, dict)) else None
+                    live_price = get_delayed_price(liveprices_cache, symbol)
                     
                     executed = False
                     if live_price is not None:
@@ -243,8 +271,7 @@ def main():
                         continue
                         
                     # Fetch immediate live price
-                    live_data = liveprices_cache.get(f"prices:{symbol}")
-                    live_price = live_data.get("price") if (live_data and isinstance(live_data, dict)) else None
+                    live_price = get_delayed_price(liveprices_cache, symbol)
                     
                     response_data = None
                     
@@ -273,35 +300,35 @@ def main():
                         
                     if action_type == "buy":
                         new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "buy", quantity, execution_price)
-                            logger.info(f"IMMEDIATE BUY EXECUTION: {strategy_id} bought {quantity} {symbol} @ {execution_price}. New Pos: {new_qty} (Avg: {new_avg:.2f})")
-                            log_trade(strategy_id, symbol, "buy", quantity, execution_price)
-                            
-                            response_data = _ok({
-                                "symbol": symbol,
-                                "action": "buy",
-                                "executed_quantity": quantity,
-                                "executed_price": execution_price,
-                                "current_position": new_qty,
-                                "current_avg_price": new_avg,
-                                "ts": _now_s()
-                            })
-                            
-                        elif action_type == "sell":
-                            new_qty, new_avg = update_position(state, strategy_id, symbol, "sell", quantity, execution_price)
-                            logger.info(f"IMMEDIATE SELL EXECUTION: {strategy_id} sold {quantity} {symbol} @ {execution_price}. New Pos: {new_qty} (Avg: {new_avg:.2f})")
-                            log_trade(strategy_id, symbol, "sell", quantity, execution_price)
-                            
-                            response_data = _ok({
-                                "symbol": symbol,
-                                "action": "sell",
-                                "executed_quantity": quantity,
-                                "executed_price": execution_price,
-                                "current_position": new_qty,
-                                "current_avg_price": new_avg,
-                                "ts": _now_s()
-                            })
-                        else:
-                            response_data = _error("INVALID_ACTION", f"Unknown action: {action_type}")
+                        logger.info(f"IMMEDIATE BUY EXECUTION: {strategy_id} bought {quantity} {symbol} @ {execution_price}. New Pos: {new_qty} (Avg: {new_avg:.2f})")
+                        log_trade(strategy_id, symbol, "buy", quantity, execution_price)
+                        
+                        response_data = _ok({
+                            "symbol": symbol,
+                            "action": "buy",
+                            "executed_quantity": quantity,
+                            "executed_price": execution_price,
+                            "current_position": new_qty,
+                            "current_avg_price": new_avg,
+                            "ts": _now_s()
+                        })
+                        
+                    elif action_type == "sell":
+                        new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "sell", quantity, execution_price)
+                        logger.info(f"IMMEDIATE SELL EXECUTION: {strategy_id} sold {quantity} {symbol} @ {execution_price}. New Pos: {new_qty} (Avg: {new_avg:.2f})")
+                        log_trade(strategy_id, symbol, "sell", quantity, execution_price)
+                        
+                        response_data = _ok({
+                            "symbol": symbol,
+                            "action": "sell",
+                            "executed_quantity": quantity,
+                            "executed_price": execution_price,
+                            "current_position": new_qty,
+                            "current_avg_price": new_avg,
+                            "ts": _now_s()
+                        })
+                    else:
+                        response_data = _error("INVALID_ACTION", f"Unknown action: {action_type}")
                             
                     socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
                     

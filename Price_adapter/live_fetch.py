@@ -14,8 +14,19 @@ async def main(stocklist):
         print("stock:", stock, "\n price:", price)
         cache_key = f"prices:{stock}"
         
-        # Consistent with Trade_adapter's expectation: dict with "price"
-        cache.set(cache_key, {"price": price, "ts": asyncio.get_event_loop().time()})
+        # Store multiple responses to allow delayed price pulling
+        current_data = cache.get(cache_key, [])
+        if not isinstance(current_data, list):
+            current_data = []
+            
+        now = asyncio.get_event_loop().time()
+        current_data.append({"price": price, "ts": now})
+        
+        # Retain only the last 1.5 minutes (90 seconds)
+        cutoff = now - 90
+        current_data = [d for d in current_data if d["ts"] > cutoff]
+        
+        cache.set(cache_key, current_data)
         #cache.flush()
 
     try:

@@ -38,7 +38,8 @@ def adx(symbol, period, interval):
     plus_di = 100 * plus_dm.ewm(alpha=1/period, adjust=False).mean() / atr
     minus_di = 100 * minus_dm.ewm(alpha=1/period, adjust=False).mean() / atr
     
-    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    dx = dx.fillna(0)
     adx_value = dx.ewm(alpha=1/period, adjust=False).mean().iloc[-1]
     return adx_value
 
