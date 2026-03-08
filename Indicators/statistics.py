@@ -1,4 +1,4 @@
-from Candle_fetcher import candle_list
+from .Candle_fetcher import candle_list
 import pandas as pd
 
 # Statistical indicators are useful for quant-style strategies and filtering.
@@ -19,6 +19,10 @@ def z_score(symbol, period, interval):
     prices_ser = pd.Series(prices)
     rolling_mean = prices_ser.rolling(window=period).mean()
     rolling_std = prices_ser.rolling(window=period).std()
+    
+    if rolling_std.iloc[-1] == 0 or pd.isna(rolling_std.iloc[-1]):
+        return 0.0
+        
     z_score_val = (prices_ser.iloc[-1] - rolling_mean.iloc[-1]) / rolling_std.iloc[-1]
     return z_score_val
 

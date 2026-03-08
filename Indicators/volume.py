@@ -1,4 +1,4 @@
-from Candle_fetcher import candle_list
+from .Candle_fetcher import candle_list
 import pandas as pd
 
 # Volume-based indicators analyze the amount of traded volume to understand market strength.

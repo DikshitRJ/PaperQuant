@@ -1,4 +1,4 @@
-from Candle_fetcher import candle_list
+from .Candle_fetcher import candle_list
 import pandas as pd
 import numpy as np
 
@@ -52,7 +52,12 @@ def choppiness_index(symbol, period, interval):
     range_high = high_ser.rolling(window=period).max()
     range_low = low_ser.rolling(window=period).min()
     
+    price_range = range_high - range_low
+    # Avoid division by zero
+    if price_range.iloc[-1] == 0 or pd.isna(price_range.iloc[-1]):
+        return 50.0  # Return neutral value if no range
+        
     # Calculate chop
-    chop = 100 * np.log10(sum_tr / (range_high - range_low)) / np.log10(period)
+    chop = 100 * np.log10(sum_tr / price_range) / np.log10(period)
     
-    return chop.iloc[-1]
+    return chop.iloc[-1] if not pd.isna(chop.iloc[-1]) else None

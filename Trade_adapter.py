@@ -163,10 +163,10 @@ def main():
     
     # Initialize Diskcache
     logger.info(f"Connecting to State Cache: {STATE_CACHE_PATH}")
-    state_cache = Cache(STATE_CACHE_PATH)
+    state_cache = Cache(STATE_CACHE_PATH, timeout=30)
     
     logger.info(f"Connecting to Live Prices Cache: {LIVEPRICES_CACHE_PATH}")
-    liveprices_cache = Cache(LIVEPRICES_CACHE_PATH)
+    liveprices_cache = Cache(LIVEPRICES_CACHE_PATH, timeout=30)
     
     # Initialize ZeroMQ
     context = zmq.Context.instance()

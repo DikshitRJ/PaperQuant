@@ -1,14 +1,14 @@
-# Import all modules in the Indicators directory
-import levels
-import market_structure
-import moving_avg
-import momentum
-import volume
-import volatility
-import trend
-import statistics
-import signals
-import price_transforms
+# Import all modules in the Indicators directory using relative imports
+from . import levels
+from . import market_structure
+from . import moving_avg
+from . import momentum
+from . import volume
+from . import volatility
+from . import trend
+from . import statistics
+from . import signals
+from . import price_transforms
 
 # Create a unified namespace for all indicators
 class indicators:

@@ -1,4 +1,4 @@
-from Candle_fetcher import candle_list
+from .Candle_fetcher import candle_list
 import pandas as pd
 
 # Volatility indicators measure the degree of variation in price movements.
@@ -39,6 +39,9 @@ def bollinger_bands(symbol, period, interval, multiplier=2):
     upper_band = middle_band + (multiplier * std_dev)
     lower_band = middle_band - (multiplier * std_dev)
     
+    if upper_band.dropna().empty:
+        return None
+        
     return {
         "upper": upper_band.iloc[-1],
         "middle": middle_band.iloc[-1],

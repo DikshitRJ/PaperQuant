@@ -3,7 +3,7 @@ from diskcache import Cache
 import asyncio
 import os
 def init_cache():
-    return Cache("./Temporary/cache_liveprices")
+    return Cache("./Temporary/cache_liveprices", timeout=30)
 
 
 async def main(stocklist):

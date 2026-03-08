@@ -1,4 +1,4 @@
-from Candle_fetcher import candle_list
+from .Candle_fetcher import candle_list
 import pandas as pd
 import numpy as np
 
@@ -95,7 +95,11 @@ def ama(symbol, period, interval, fast=2, slow=30):
     series = pd.Series(candles)
     change = (series - series.shift(period)).abs()
     volatility = (series - series.shift(1)).abs().rolling(period).sum()
+    
+    # Avoid division by zero
+    volatility = volatility.replace(0, np.nan)
     er = change / volatility
+    er = er.fillna(0)
     
     sc_fast = 2 / (fast + 1)
     sc_slow = 2 / (slow + 1)
@@ -103,12 +107,16 @@ def ama(symbol, period, interval, fast=2, slow=30):
     
     ama_val = pd.Series(index=series.index, dtype='float64')
     # Start with an SMA or first close
-    ama_val.iloc[period-1] = series.iloc[period-1]
+    valid_start_idx = period - 1
+    if len(series) <= valid_start_idx:
+        return None
+        
+    ama_val.iloc[valid_start_idx] = series.iloc[valid_start_idx]
     
     for i in range(period, len(series)):
         ama_val.iloc[i] = ama_val.iloc[i-1] + sc.iloc[i] * (series.iloc[i] - ama_val.iloc[i-1])
         
-    return ama_val.iloc[-1]
+    return ama_val.iloc[-1] if not ama_val.dropna().empty else None
 
 def macd(symbol, short_period, long_period, signal_period, interval):
     """
