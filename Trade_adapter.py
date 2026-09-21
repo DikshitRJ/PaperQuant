@@ -71,10 +71,11 @@ def get_delayed_price(cache, symbol, delay_seconds=60):
     # Find the one just before target_ts
     selected_price = None
     for item in price_data:
+        if not isinstance(item, dict) or "ts" not in item:
+            continue
         if item["ts"] <= target_ts:
             selected_price = item["price"]
         else:
-            # Since it's sorted, once we exceed target_ts, we've found our match
             break
             
     # Fallback: if all are newer than target_ts, return the oldest available
