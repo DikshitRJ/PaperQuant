@@ -1,7 +1,9 @@
-import yfinance as yf
-import pandas as pd
-from datetime import datetime, timedelta, timezone
 import logging
+from datetime import datetime, timedelta, timezone
+
+import pandas as pd
+import yfinance as yf
+
 
 def _to_number(val, is_int=False):
     if pd.isna(val):
@@ -10,6 +12,7 @@ def _to_number(val, is_int=False):
         return int(val) if is_int else float(val)
     except Exception:
         return None
+
 
 def _normalize_timestamp(ts):
     """
@@ -20,6 +23,7 @@ def _normalize_timestamp(ts):
     else:
         ts = ts.astimezone(timezone.utc)
     return ts.replace(second=0, microsecond=0)
+
 
 INTERVAL_TO_DELTA = {
     "1m": timedelta(minutes=1),
@@ -37,6 +41,7 @@ INTERVAL_TO_DELTA = {
     "3mo": timedelta(days=90),
 }
 
+
 def candle_list(symbol, no_of_candles, interval, field="all"):
     try:
         if interval not in INTERVAL_TO_DELTA:
@@ -47,8 +52,10 @@ def candle_list(symbol, no_of_candles, interval, field="all"):
 
         # Buffer: Fetch 2x + 10 to account for weekends/holidays/gaps
         buffer_factor = 2.5 if interval in ["1d", "1wk", "1mo"] else 4.0
-        start_date = now - (INTERVAL_TO_DELTA[interval] * int(no_of_candles * buffer_factor + 10))
-        
+        start_date = now - (
+            INTERVAL_TO_DELTA[interval] * int(no_of_candles * buffer_factor + 10)
+        )
+
         # yfinance history end is exclusive
         df = stock.history(interval=interval, start=start_date, end=now)
 
@@ -58,18 +65,20 @@ def candle_list(symbol, no_of_candles, interval, field="all"):
 
         # Ensure we only have the requested number of most recent candles
         df = df.tail(no_of_candles)
-        
+
         candles = []
         for ts, row in df.iterrows():
-            candles.append({
-                "symbol": symbol,
-                "open": _to_number(row["Open"]),
-                "high": _to_number(row["High"]),
-                "low": _to_number(row["Low"]),
-                "close": _to_number(row["Close"]),
-                "volume": _to_number(row["Volume"], is_int=True),
-                "timestamp": _normalize_timestamp(ts.to_pydatetime()),
-            })
+            candles.append(
+                {
+                    "symbol": symbol,
+                    "open": _to_number(row["Open"]),
+                    "high": _to_number(row["High"]),
+                    "low": _to_number(row["Low"]),
+                    "close": _to_number(row["Close"]),
+                    "volume": _to_number(row["Volume"], is_int=True),
+                    "timestamp": _normalize_timestamp(ts.to_pydatetime()),
+                }
+            )
 
         if field == "all":
             return candles

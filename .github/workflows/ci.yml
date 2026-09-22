@@ -1,0 +1,59 @@
+name: Universal CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  code-quality:
+    name: Phase 1 - Code Quality (Lint & Format)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          
+      - name: Install dependencies
+        run: pip install flake8 bandit
+
+      - name: Run Flake8 (Strict Linting)
+        run: flake8 .
+
+      - name: Run Bandit (Security Audit)
+        run: bandit -r api/ Trade_adapter.py -ll
+
+  integration-tests:
+    name: Phase 2 - Integration Tests
+    needs: code-quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install poetry
+          poetry install
+          pip install httpx pytest
+
+      - name: Run Integration Tests
+        env:
+          PYTHONPATH: .
+        run: |
+          poetry run pytest tests/ -v

@@ -1,8 +1,10 @@
-from .Candle_fetcher import candle_list
 import pandas as pd
+
+from .Candle_fetcher import candle_list
 
 # Signal indicators generate binary or event-based outputs for strategies.
 # Examples include Moving Average Crossovers, RSI Divergence, Breakout Detection, etc.
+
 
 def moving_average_crossover(symbol, period, interval, short_period=9, long_period=21):
     """
@@ -17,16 +19,17 @@ def moving_average_crossover(symbol, period, interval, short_period=9, long_peri
     prices = candle_list(symbol, period, interval, field="close")
     if not prices or len(prices) < long_period + 1:
         return 0
-        
+
     prices_ser = pd.Series(prices)
     short_ma = prices_ser.rolling(window=short_period).mean()
     long_ma = prices_ser.rolling(window=long_period).mean()
-    
+
     if short_ma.iloc[-1] > long_ma.iloc[-1] and short_ma.iloc[-2] <= long_ma.iloc[-2]:
         return 1  # Bullish crossover
     elif short_ma.iloc[-1] < long_ma.iloc[-1] and short_ma.iloc[-2] >= long_ma.iloc[-2]:
         return -1  # Bearish crossover
     return 0
+
 
 def breakout_detection(symbol, period, interval):
     """
@@ -39,14 +42,14 @@ def breakout_detection(symbol, period, interval):
     prices = candle_list(symbol, period + 1, interval, field="close")
     if not prices or len(prices) < period + 1:
         return 0
-        
+
     prices_ser = pd.Series(prices)
     # Use previous 'period' candles to find resistance/support
     resistance = prices_ser.iloc[:-1].rolling(window=period).max().iloc[-1]
     support = prices_ser.iloc[:-1].rolling(window=period).min().iloc[-1]
-    
+
     current_price = prices_ser.iloc[-1]
-    
+
     if current_price > resistance:
         return 1  # Breakout above resistance
     elif current_price < support:

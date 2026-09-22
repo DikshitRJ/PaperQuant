@@ -1,8 +1,10 @@
-from .Candle_fetcher import candle_list
 import pandas as pd
+
+from .Candle_fetcher import candle_list
 
 # Statistical indicators are useful for quant-style strategies and filtering.
 # Examples include Z-score, Linear Regression, Rolling Sharpe Ratio, etc.
+
 
 def z_score(symbol, period, interval):
     """
@@ -15,16 +17,17 @@ def z_score(symbol, period, interval):
     prices = candle_list(symbol, period, interval, field="close")
     if not prices:
         return None
-        
+
     prices_ser = pd.Series(prices)
     rolling_mean = prices_ser.rolling(window=period).mean()
     rolling_std = prices_ser.rolling(window=period).std()
-    
+
     if rolling_std.iloc[-1] == 0 or pd.isna(rolling_std.iloc[-1]):
         return 0.0
-        
+
     z_score_val = (prices_ser.iloc[-1] - rolling_mean.iloc[-1]) / rolling_std.iloc[-1]
     return z_score_val
+
 
 def rolling_sharpe_ratio(symbol, period, interval):
     """
@@ -37,7 +40,7 @@ def rolling_sharpe_ratio(symbol, period, interval):
     prices = candle_list(symbol, period + 1, interval, field="close")
     if not prices:
         return None
-        
+
     returns = pd.Series(prices).pct_change().dropna()
     rolling_mean = returns.rolling(window=period).mean()
     rolling_std = returns.rolling(window=period).std()

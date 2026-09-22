@@ -115,11 +115,21 @@ PaperQuant/
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from api.routes import health, session, positions, stats, algorithms, settings, logs, market
+from api.routes import (
+    health,
+    session,
+    positions,
+    stats,
+    algorithms,
+    settings,
+    logs,
+    market,
+)
 from api.websocket import ws_router
 from api.services.session_manager import SessionManager
 
 session_manager = SessionManager()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -129,20 +139,21 @@ async def lifespan(app: FastAPI):
     # Shutdown
     await session_manager.shutdown()
 
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="PaperQuant API",
         version="0.2.0",
         lifespan=lifespan,
     )
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["tauri://localhost", "http://localhost:*", "http://127.0.0.1:*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+
     app.include_router(health.router, prefix="/api")
     app.include_router(session.router, prefix="/api")
     app.include_router(positions.router, prefix="/api")
@@ -152,7 +163,7 @@ def create_app() -> FastAPI:
     app.include_router(logs.router, prefix="/api")
     app.include_router(market.router, prefix="/api")
     app.include_router(ws_router)
-    
+
     return app
 ```
 
@@ -163,26 +174,30 @@ import uvicorn
 import socket
 from api.app import create_app
 
+
 def find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0))
+        s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
 
 def main():
     port = find_free_port()
-    
+
     # Write port to discoverable location for Tauri
     import os
+
     port_file = os.path.expanduser("~/.paperquant/port")
     os.makedirs(os.path.dirname(port_file), exist_ok=True)
-    with open(port_file, 'w') as f:
+    with open(port_file, "w") as f:
         f.write(str(port))
-    
+
     # Also print to stdout for Tauri to capture
     print(f"PAPERQUANT_PORT={port}", flush=True)
-    
+
     app = create_app()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+
 
 if __name__ == "__main__":
     main()
@@ -200,14 +215,17 @@ Define all Pydantic models matching the API spec exactly:
 from pydantic import BaseModel
 from typing import Optional, Literal
 
+
 class WatchlistItem(BaseModel):
     ticker: str
     capital: float = 1000.0
+
 
 class SessionStartRequest(BaseModel):
     watchlist: list[WatchlistItem]
     strategy_id: Optional[str] = None
     settings: Optional[dict] = None
+
 
 class Position(BaseModel):
     ticker: str
@@ -221,10 +239,12 @@ class Position(BaseModel):
     pnl_percent: str
     strategy_id: str
 
+
 class LogEntry(BaseModel):
     time: str
     content: str
     color: str
+
 
 class Algorithm(BaseModel):
     id: str
@@ -234,19 +254,22 @@ class Algorithm(BaseModel):
     created_at: str
     history: list[dict] = []
 
+
 class SessionStats(BaseModel):
     pnl: str
     invested: str
     current: str
     uptime: str
-    trend: Literal['up', 'down', 'none']
+    trend: Literal["up", "down", "none"]
+
 
 class GlobalStats(BaseModel):
     total_pnl: str
     pnl_percent: str
     active_algos: str
     algo_runtime: str
-    pnl_trend: Literal['up', 'down', 'none']
+    pnl_trend: Literal["up", "down", "none"]
+
 
 class Settings(BaseModel):
     currency: str = "USD"
@@ -280,21 +303,24 @@ import subprocess
 import threading
 from api.services.log_buffer import LogBuffer
 
+
 class ProcessManager:
     def __init__(self, base_dir: str, log_buffer: LogBuffer):
         self.base_dir = base_dir
         self.log_buffer = log_buffer
         self.processes: dict[str, subprocess.Popen] = {}
-    
-    def start_process(self, name: str, cmd: list[str], cwd: str = None, env: dict = None):
+
+    def start_process(
+        self, name: str, cmd: list[str], cwd: str = None, env: dict = None
+    ):
         """Start a subprocess with stdout capture."""
         if name in self.processes and self.processes[name].poll() is None:
             return  # Already running
-        
+
         full_env = os.environ.copy()
         if env:
             full_env.update(env)
-        
+
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -305,23 +331,29 @@ class ProcessManager:
             env=full_env,
         )
         self.processes[name] = proc
-        
+
         # Daemon thread to read stdout
         t = threading.Thread(target=self._read_output, args=(name, proc), daemon=True)
         t.start()
-    
+
     def start_price_adapter(self):
         """Launch Price_adapter with correct CWD."""
         cmd = [sys.executable, "main.py"]
         cwd = os.path.join(self.base_dir, "Price_adapter")
         self.start_process("price_adapter", cmd, cwd=cwd)
-    
+
     def start_trade_adapter(self):
         """Launch Trade_adapter from project root."""
         cmd = [sys.executable, "Trade_adapter.py"]
         self.start_process("trade_adapter", cmd)
-    
-    def start_strategy(self, strategy_id: str, script_path: str, symbol: str, trade_endpoint: str = "tcp://127.0.0.1:5555"):
+
+    def start_strategy(
+        self,
+        strategy_id: str,
+        script_path: str,
+        symbol: str,
+        trade_endpoint: str = "tcp://127.0.0.1:5555",
+    ):
         """Launch a user strategy as a subprocess."""
         cmd = [sys.executable, script_path]
         env = {
@@ -331,12 +363,12 @@ class ProcessManager:
             "SIM_CACHE_PATH": os.path.join(self.base_dir, "Temporary", "cache_candles"),
         }
         self.start_process(f"strategy_{strategy_id}", cmd, env=env)
-    
+
     def get_status(self, name: str) -> str:
         if name not in self.processes:
             return "stopped"
         return "running" if self.processes[name].poll() is None else "error"
-    
+
     def stop_all(self):
         for name, proc in self.processes.items():
             if proc.poll() is None:
@@ -346,7 +378,7 @@ class ProcessManager:
                 except subprocess.TimeoutExpired:
                     proc.kill()
         self.processes.clear()
-    
+
     def stop_process(self, name: str):
         if name in self.processes:
             proc = self.processes[name]
@@ -357,7 +389,7 @@ class ProcessManager:
                 except subprocess.TimeoutExpired:
                     proc.kill()
             del self.processes[name]
-    
+
     def _read_output(self, name: str, proc: subprocess.Popen):
         try:
             for line in proc.stdout:
@@ -378,18 +410,19 @@ This is the critical missing piece — computing displayable P&L from raw positi
 from diskcache import Cache
 from typing import Optional
 
+
 class PortfolioService:
     def __init__(self, state_cache_path: str, liveprices_cache_path: str):
         self.state_cache = Cache(state_cache_path)
         self.prices_cache = Cache(liveprices_cache_path)
-    
+
     def get_current_price(self, symbol: str) -> Optional[float]:
         """Get the latest price from live prices cache."""
         prices = self.prices_cache.get(f"prices:{symbol}")
         if prices and len(prices) > 0:
             return prices[-1]["price"]
         return None
-    
+
     def get_enriched_positions(self) -> list[dict]:
         """Get all positions enriched with live P&L data."""
         positions = []
@@ -400,62 +433,65 @@ class PortfolioService:
             data = self.state_cache.get(key)
             if not data or data.get("qty", 0) == 0:
                 continue
-            
+
             qty = data["qty"]
             avg_price = data["avg_price"]
             current_price = self.get_current_price(symbol) or avg_price
-            
+
             invested = qty * avg_price
             current_val = qty * current_price
             pnl_val = current_val - invested
             pnl_pct = (pnl_val / invested * 100) if invested != 0 else 0
-            
-            positions.append({
-                "ticker": symbol,
-                "initials": symbol[:2].upper(),
-                "qty": qty,
-                "avg_price": round(avg_price, 2),
-                "current_price": round(current_price, 2),
-                "invested": f"${invested:,.2f}",
-                "current": f"${current_val:,.2f}",
-                "pnl": f"{'+' if pnl_val >= 0 else ''}{pnl_val:,.2f}",
-                "pnl_percent": f"{'+' if pnl_pct >= 0 else ''}{pnl_pct:.2f}%",
-                "strategy_id": strategy_id,
-            })
-        
+
+            positions.append(
+                {
+                    "ticker": symbol,
+                    "initials": symbol[:2].upper(),
+                    "qty": qty,
+                    "avg_price": round(avg_price, 2),
+                    "current_price": round(current_price, 2),
+                    "invested": f"${invested:,.2f}",
+                    "current": f"${current_val:,.2f}",
+                    "pnl": f"{'+' if pnl_val >= 0 else ''}{pnl_val:,.2f}",
+                    "pnl_percent": f"{'+' if pnl_pct >= 0 else ''}{pnl_pct:.2f}%",
+                    "strategy_id": strategy_id,
+                }
+            )
+
         return positions
-    
+
     def get_aggregate_stats(self, session_start_time: float) -> dict:
         """Compute aggregate P&L across all positions."""
         positions = self.get_enriched_positions()
-        
+
         total_invested = sum(p["qty"] * p["avg_price"] for p in positions)
         total_current = sum(p["qty"] * p["current_price"] for p in positions)
         total_pnl = total_current - total_invested
         pnl_pct = (total_pnl / total_invested * 100) if total_invested != 0 else 0
-        
+
         import time
+
         elapsed = int(time.time() - session_start_time)
         hours, remainder = divmod(elapsed, 3600)
         minutes, seconds = divmod(remainder, 60)
-        
+
         trend = "up" if total_pnl > 0 else ("down" if total_pnl < 0 else "none")
-        
+
         return {
             "session": {
-                "pnl": f"{'+'if total_pnl>=0 else ''}${abs(total_pnl):,.2f}",
+                "pnl": f"{'+' if total_pnl >= 0 else ''}${abs(total_pnl):,.2f}",
                 "invested": f"${total_invested:,.2f}",
                 "current": f"${total_current:,.2f}",
                 "uptime": f"{hours:02d}:{minutes:02d}:{seconds:02d}",
                 "trend": trend,
             },
             "global": {
-                "total_pnl": f"{'+'if total_pnl>=0 else ''}${abs(total_pnl):,.2f}",
-                "pnl_percent": f"{'+'if pnl_pct>=0 else ''}{pnl_pct:.2f}%",
+                "total_pnl": f"{'+' if total_pnl >= 0 else ''}${abs(total_pnl):,.2f}",
+                "pnl_percent": f"{'+' if pnl_pct >= 0 else ''}{pnl_pct:.2f}%",
                 "active_algos": str(len(set(p["strategy_id"] for p in positions))),
                 "algo_runtime": f"{hours}h {minutes}m",
                 "pnl_trend": trend,
-            }
+            },
         }
 ```
 
@@ -475,13 +511,14 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 
+
 class AlgorithmStore:
     def __init__(self, base_dir: str, db_path: str):
         self.algorithms_dir = os.path.join(base_dir, "algorithms")
         self.db_path = db_path
         os.makedirs(self.algorithms_dir, exist_ok=True)
         self._init_db()
-    
+
     def _init_db(self):
         conn = sqlite3.connect(self.db_path)
         conn.execute("""
@@ -506,65 +543,86 @@ class AlgorithmStore:
         """)
         conn.commit()
         conn.close()
-    
+
     def list_algorithms(self) -> list[dict]:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        algos = conn.execute("SELECT * FROM algorithms ORDER BY created_at DESC").fetchall()
+        algos = conn.execute(
+            "SELECT * FROM algorithms ORDER BY created_at DESC"
+        ).fetchall()
         result = []
         for algo in algos:
             runs = conn.execute(
                 "SELECT * FROM algorithm_runs WHERE algorithm_id = ? ORDER BY date DESC",
-                (algo["id"],)
+                (algo["id"],),
             ).fetchall()
-            result.append({
-                "id": algo["id"],
-                "name": algo["name"],
-                "filename": algo["filename"],
-                "dependencies": json.loads(algo["dependencies"]),
-                "created_at": algo["created_at"],
-                "history": [dict(r) for r in runs],
-            })
+            result.append(
+                {
+                    "id": algo["id"],
+                    "name": algo["name"],
+                    "filename": algo["filename"],
+                    "dependencies": json.loads(algo["dependencies"]),
+                    "created_at": algo["created_at"],
+                    "history": [dict(r) for r in runs],
+                }
+            )
         conn.close()
         return result
-    
-    def register(self, algo_id: str, name: str, filename: str, dependencies: list[str], file_content: bytes) -> dict:
+
+    def register(
+        self,
+        algo_id: str,
+        name: str,
+        filename: str,
+        dependencies: list[str],
+        file_content: bytes,
+    ) -> dict:
         # Save the Python file
         filepath = os.path.join(self.algorithms_dir, filename)
         with open(filepath, "wb") as f:
             f.write(file_content)
-        
+
         now = datetime.now(timezone.utc).isoformat()
         conn = sqlite3.connect(self.db_path)
         conn.execute(
             "INSERT INTO algorithms (id, name, filename, dependencies, created_at) VALUES (?, ?, ?, ?, ?)",
-            (algo_id, name, filename, json.dumps(dependencies), now)
+            (algo_id, name, filename, json.dumps(dependencies), now),
         )
         conn.commit()
         conn.close()
-        
-        return {"id": algo_id, "name": name, "filename": filename, "dependencies": dependencies, "created_at": now}
-    
+
+        return {
+            "id": algo_id,
+            "name": name,
+            "filename": filename,
+            "dependencies": dependencies,
+            "created_at": now,
+        }
+
     def delete(self, algo_id: str) -> bool:
         conn = sqlite3.connect(self.db_path)
-        algo = conn.execute("SELECT filename FROM algorithms WHERE id = ?", (algo_id,)).fetchone()
+        algo = conn.execute(
+            "SELECT filename FROM algorithms WHERE id = ?", (algo_id,)
+        ).fetchone()
         if not algo:
             conn.close()
             return False
-        
+
         filepath = os.path.join(self.algorithms_dir, algo[0])
         if os.path.exists(filepath):
             os.remove(filepath)
-        
+
         conn.execute("DELETE FROM algorithm_runs WHERE algorithm_id = ?", (algo_id,))
         conn.execute("DELETE FROM algorithms WHERE id = ?", (algo_id,))
         conn.commit()
         conn.close()
         return True
-    
+
     def get_script_path(self, algo_id: str) -> Optional[str]:
         conn = sqlite3.connect(self.db_path)
-        algo = conn.execute("SELECT filename FROM algorithms WHERE id = ?", (algo_id,)).fetchone()
+        algo = conn.execute(
+            "SELECT filename FROM algorithms WHERE id = ?", (algo_id,)
+        ).fetchone()
         conn.close()
         if algo:
             return os.path.join(self.algorithms_dir, algo[0])
@@ -586,23 +644,26 @@ from typing import Any
 
 ws_router = APIRouter()
 
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
-    
+
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-    
+
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
-    
+
     async def broadcast(self, event_type: str, data: Any):
-        message = json.dumps({
-            "type": event_type,
-            "data": data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        message = json.dumps(
+            {
+                "type": event_type,
+                "data": data,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         disconnected = []
         for connection in self.active_connections:
             try:
@@ -612,7 +673,9 @@ class ConnectionManager:
         for conn in disconnected:
             self.active_connections.remove(conn)
 
+
 manager = ConnectionManager()
+
 
 @ws_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -637,9 +700,10 @@ import threading
 from datetime import datetime
 from collections import deque
 
+
 class LogBuffer:
     """Thread-safe circular log buffer with structured formatting."""
-    
+
     # Color mapping for log sources
     SOURCE_COLORS = {
         "price_adapter": "text-blue-400",
@@ -648,41 +712,43 @@ class LogBuffer:
         "system": "text-purple-400",
         "error": "text-red-400",
     }
-    
+
     def __init__(self, max_size: int = 500):
         self._buffer: deque = deque(maxlen=max_size)
         self._lock = threading.Lock()
         self._last_id = 0
-    
+
     def add(self, source: str, message: str):
         """Add a log entry with automatic formatting."""
         with self._lock:
             self._last_id += 1
             color = self.SOURCE_COLORS.get(source, "text-gray-400")
-            
+
             # Detect errors
             lower_msg = message.lower()
-            if any(kw in lower_msg for kw in ["error", "exception", "traceback", "failed"]):
+            if any(
+                kw in lower_msg for kw in ["error", "exception", "traceback", "failed"]
+            ):
                 color = self.SOURCE_COLORS["error"]
-            
+
             entry = {
                 "time": datetime.now().strftime("%H:%M:%S"),
                 "content": f"[{source.upper()}] {message}",
                 "color": color,
             }
             self._buffer.append(entry)
-    
+
     def get_all(self) -> list[dict]:
         with self._lock:
             return list(self._buffer)
-    
+
     def get_since(self, since_time: str = None, limit: int = 100) -> list[dict]:
         with self._lock:
             entries = list(self._buffer)
             if since_time:
                 entries = [e for e in entries if e["time"] > since_time]
             return entries[-limit:]
-    
+
     def clear(self):
         with self._lock:
             self._buffer.clear()
@@ -711,6 +777,7 @@ DEFAULT_SETTINGS = {
     "terminal_font_size": 14,
 }
 
+
 class SettingsStore:
     def __init__(self, config_dir: str = None):
         if config_dir is None:
@@ -718,22 +785,22 @@ class SettingsStore:
         os.makedirs(config_dir, exist_ok=True)
         self.settings_path = os.path.join(config_dir, "settings.json")
         self._settings = self._load()
-    
+
     def _load(self) -> dict:
         if os.path.exists(self.settings_path):
-            with open(self.settings_path, 'r') as f:
+            with open(self.settings_path, "r") as f:
                 saved = json.load(f)
             # Merge with defaults for any new keys
             return {**DEFAULT_SETTINGS, **saved}
         return dict(DEFAULT_SETTINGS)
-    
+
     def _save(self):
-        with open(self.settings_path, 'w') as f:
+        with open(self.settings_path, "w") as f:
             json.dump(self._settings, f, indent=2)
-    
+
     def get_all(self) -> dict:
         return dict(self._settings)
-    
+
     def update(self, updates: dict) -> dict:
         for key, value in updates.items():
             if key in DEFAULT_SETTINGS:
@@ -763,13 +830,14 @@ from api.services.algorithm_store import AlgorithmStore
 from api.services.settings_store import SettingsStore
 from api.services.stats_tracker import StatsTracker
 
+
 class SessionManager:
     def __init__(self):
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # Go up one more level if api/ is a subdirectory
         if os.path.basename(self.base_dir) == "api":
             self.base_dir = os.path.dirname(self.base_dir)
-        
+
         self.temp_dir = os.path.join(self.base_dir, "Temporary")
         self.log_buffer = LogBuffer()
         self.pm = ProcessManager(self.base_dir, self.log_buffer)
@@ -783,78 +851,84 @@ class SessionManager:
         )
         self.settings = SettingsStore()
         self.stats_tracker = StatsTracker()
-        
+
         self.active_session = None  # dict with session info
         self._start_time = None
         self._push_task = None
-    
+
     async def initialize(self):
         os.makedirs(self.temp_dir, exist_ok=True)
         self.log_buffer.add("system", "PaperQuant API server initialized")
-    
+
     async def shutdown(self):
         if self._push_task:
             self._push_task.cancel()
         self.pm.stop_all()
-    
+
     async def start_session(self, watchlist, strategy_id=None, session_settings=None):
         if self.active_session:
             return None  # Already active
-        
+
         # Write stocklist.json
         stocklist_path = os.path.join(self.temp_dir, "stocklist.json")
         tickers = [item["ticker"] for item in watchlist]
         with open(stocklist_path, "w") as f:
             json.dump(tickers, f)
-        
+
         # Start adapters
         self.pm.start_price_adapter()
         self.pm.start_trade_adapter()
-        
+
         self._start_time = time.time()
         session_id = f"sess_{time.strftime('%Y%m%d_%H%M%S')}"
-        
+
         self.active_session = {
             "session_id": session_id,
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "watchlist": tickers,
             "strategy_id": strategy_id,
         }
-        
+
         # Start strategy if specified
         if strategy_id:
             script_path = self.algo_store.get_script_path(strategy_id)
             if script_path:
                 for ticker in tickers:
                     self.pm.start_strategy(strategy_id, script_path, ticker)
-        
+
         # Start WebSocket push loop
         self._push_task = asyncio.create_task(self._push_loop())
-        
-        self.log_buffer.add("system", f"Session {session_id} started with {len(tickers)} tickers")
+
+        self.log_buffer.add(
+            "system", f"Session {session_id} started with {len(tickers)} tickers"
+        )
         return self.active_session
-    
+
     async def stop_session(self):
         if not self.active_session:
             return None
-        
+
         session = self.active_session
         duration = int(time.time() - self._start_time) if self._start_time else 0
-        
+
         if self._push_task:
             self._push_task.cancel()
             self._push_task = None
-        
+
         self.pm.stop_all()
         self.active_session = None
         self._start_time = None
-        
+
         self.log_buffer.add("system", f"Session {session['session_id']} stopped")
-        return {"status": "stopped", "session_id": session["session_id"], "duration_seconds": duration}
-    
+        return {
+            "status": "stopped",
+            "session_id": session["session_id"],
+            "duration_seconds": duration,
+        }
+
     async def reset_session(self):
         await self.stop_session()
-        
+
         # Clear temporary data (preserve stocklist structure)
         for item in os.listdir(self.temp_dir):
             path = os.path.join(self.temp_dir, item)
@@ -866,36 +940,37 @@ class SessionManager:
                 shutil.rmtree(path, ignore_errors=True)
             else:
                 os.remove(path)
-        
+
         # Recreate cache directories
         os.makedirs(os.path.join(self.temp_dir, "state"), exist_ok=True)
         os.makedirs(os.path.join(self.temp_dir, "cache_candles"), exist_ok=True)
         os.makedirs(os.path.join(self.temp_dir, "cache_liveprices"), exist_ok=True)
-        
+
         self.log_buffer.clear()
         self.log_buffer.add("system", "Session reset complete")
         return {"status": "reset"}
-    
+
     async def _push_loop(self):
         """Background task that broadcasts state via WebSocket every 2 seconds."""
         from api.websocket import manager
+
         while True:
             try:
                 # Push positions
                 positions = self.portfolio.get_enriched_positions()
                 await manager.broadcast("positions_update", {"positions": positions})
-                
+
                 # Push stats
                 if self._start_time:
                     stats = self.portfolio.get_aggregate_stats(self._start_time)
                     await manager.broadcast("stats_update", stats)
-                
+
                 # Push new logs (incremental)
                 logs = self.log_buffer.get_all()
                 if logs:
                     for log in logs[-5:]:  # Send last 5 new logs
                         await manager.broadcast("log", log)
-                
+
                 await asyncio.sleep(2)
             except asyncio.CancelledError:
                 break

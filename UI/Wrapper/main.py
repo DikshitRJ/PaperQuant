@@ -1,12 +1,13 @@
-import os
-import sys
-import webview
-import subprocess
-import threading
 import json
-import time
+import os
 import shutil
+import subprocess
+import sys
+import threading
+import time
 from datetime import datetime
+
+import webview
 from diskcache import Cache
 
 # -------------------------------------------------
@@ -23,6 +24,7 @@ LOG_HISTORY_SIZE = 100
 # -------------------------------------------------
 # Log Capture
 # -------------------------------------------------
+
 
 class LogBuffer:
     def __init__(self, size=100):
@@ -42,11 +44,13 @@ class LogBuffer:
         with self.lock:
             return list(self.buffer)
 
+
 log_buffer = LogBuffer(LOG_HISTORY_SIZE)
 
 # -------------------------------------------------
 # Subprocess Management
 # -------------------------------------------------
+
 
 class ProcessManager:
     def __init__(self):
@@ -66,10 +70,12 @@ class ProcessManager:
                 text=True,
                 cwd=cwd,
                 bufsize=1,
-                universal_newlines=True
+                universal_newlines=True,
             )
             self.processes[name] = proc
-            threading.Thread(target=self._read_output, args=(name, proc), daemon=True).start()
+            threading.Thread(
+                target=self._read_output, args=(name, proc), daemon=True
+            ).start()
         except Exception as e:
             log_buffer.add("SYSTEM", f"Failed to start {name}: {e}")
 
@@ -90,11 +96,13 @@ class ProcessManager:
                 except subprocess.TimeoutExpired:
                     proc.kill()
 
+
 pm = ProcessManager()
 
 # -------------------------------------------------
 # API exposed to Frontend
 # -------------------------------------------------
+
 
 class API:
     def __init__(self):
@@ -112,26 +120,35 @@ class API:
                 try:
                     # Sync Logs
                     logs = self.get_logs()
-                    # We pass the list of strings. The frontend expects LogEntry objects usually, 
+                    # We pass the list of strings. The frontend expects LogEntry objects usually,
                     # but let's check what addLog expects.
                     # Based on context, it looks like it might expect a string or an object.
                     # If it's the global addLog exposed in PaperQuantContext.tsx:
                     # (window as any).addLog = addLog;
-                    # It might need formatting. For now, let's just clear and set if possible, 
+                    # It might need formatting. For now, let's just clear and set if possible,
                     # or just call a JS helper.
-                    
+
                     # More robust: push state
                     positions = self.get_positions()
-                    self._window.evaluate_js(f"if(window.updatePositions) window.updatePositions({json.dumps(positions)})")
-                    
+                    self._window.evaluate_js(
+                        f"if(window.updatePositions) window.updatePositions({json.dumps(positions)})"
+                    )
+
                     # For logs, it's better to only send NEW logs, but for a prototype, we can send all or handle it in JS.
                     # Let's just send the latest logs.
-                    self._window.evaluate_js(f"if(window.clearLogs) window.clearLogs()")
+                    self._window.evaluate_js("if(window.clearLogs) window.clearLogs()")
                     for log in logs:
                         # Convert string to LogEntry-like object if needed, or just string
                         # UI components usually expect {id, type, message, timestamp}
-                        log_obj = {"id": hash(log), "message": log, "timestamp": "", "type": "info"}
-                        self._window.evaluate_js(f"if(window.addLog) window.addLog({json.dumps(log_obj)})")
+                        log_obj = {
+                            "id": hash(log),
+                            "message": log,
+                            "timestamp": "",
+                            "type": "info",
+                        }
+                        self._window.evaluate_js(
+                            f"if(window.addLog) window.addLog({json.dumps(log_obj)})"
+                        )
 
                 except Exception as e:
                     print(f"Polling error: {e}")
@@ -140,11 +157,12 @@ class API:
     def reset_session(self):
         log_buffer.add("SYSTEM", "Resetting session...")
         pm.stop_all()
-        
+
         # Clear temporary data
         temp_dir = os.path.join(BASE_DIR, "Temporary")
         for item in os.listdir(temp_dir):
-            if item == "stocklist.json": continue # Keep stocklist
+            if item == "stocklist.json":
+                continue  # Keep stocklist
             path = os.path.join(temp_dir, item)
             try:
                 if os.path.isdir(path):
@@ -153,10 +171,10 @@ class API:
                     os.remove(path)
             except Exception as e:
                 log_buffer.add("SYSTEM", f"Error clearing {item}: {e}")
-        
+
         # Recreate state dir
         os.makedirs(STATE_CACHE_PATH, exist_ok=True)
-        
+
         # Restart adapters
         self.start_adapters()
         return {"status": "ok"}
@@ -176,12 +194,14 @@ class API:
                 if ":" in key:
                     strat_id, symbol = key.split(":")
                     if isinstance(data, dict):
-                        positions.append({
-                            "strategy_id": strat_id,
-                            "symbol": symbol,
-                            "qty": data.get("qty", 0),
-                            "avg_price": data.get("avg_price", 0.0)
-                        })
+                        positions.append(
+                            {
+                                "strategy_id": strat_id,
+                                "symbol": symbol,
+                                "qty": data.get("qty", 0),
+                                "avg_price": data.get("avg_price", 0.0),
+                            }
+                        )
             cache.close()
             return positions
         except Exception as e:
@@ -197,9 +217,11 @@ class API:
         # Start Trade Adapter
         pm.start_process("TRADE", [PYTHON_EXE, "Trade_adapter.py"])
 
+
 # -------------------------------------------------
 # Main Entry
 # -------------------------------------------------
+
 
 def main():
     if not os.path.exists(DIST_DIR):
@@ -207,7 +229,7 @@ def main():
         sys.exit(1)
 
     api = API()
-    
+
     # Pre-start adapters
     api.start_adapters()
 
@@ -216,7 +238,7 @@ def main():
         url=os.path.join(DIST_DIR, "index.html"),
         js_api=api,
         width=1280,
-        height=800
+        height=800,
     )
     api.set_window(window)
 
@@ -224,6 +246,7 @@ def main():
         webview.start(debug=True)
     finally:
         pm.stop_all()
+
 
 if __name__ == "__main__":
     main()

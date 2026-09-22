@@ -1,12 +1,15 @@
+import asyncio
+import logging
 import os
 import sys
-import zmq
 import time
-import logging
-from diskcache import Cache
-from datetime import datetime, timezone, timedelta
-import yfinance as yf
+import uuid
+from datetime import datetime, timedelta, timezone
+
 import pandas as pd
+import yfinance as yf
+import zmq
+from diskcache import Cache
 
 # -------------------------------------------------
 # Configuration
@@ -21,6 +24,7 @@ CACHE_PATH = os.getenv("SIM_CACHE_PATH", "./Temporary/cache_candles")
 
 STRATEGY_ID = os.getenv("SIM_STRATEGY_ID")
 SYMBOL = os.getenv("SIM_SYMBOL")
+TRADE_TIMEOUT_SECONDS = float(os.getenv("SIM_TRADE_TIMEOUT_SECONDS", "30"))
 
 if not STRATEGY_ID:
     raise RuntimeError("SIM_STRATEGY_ID must be set for each strategy process")
@@ -69,7 +73,8 @@ _socket = _context.socket(zmq.DEALER)
 # Explicit identity for ROUTER
 _socket.setsockopt(zmq.IDENTITY, STRATEGY_ID.encode())
 
-# High/Infinite timeout behavior since limit orders block indefinitely
+# The request wait is bounded in _send.  Keep the socket receive operation
+# cancellable by asyncio so a timed-out limit order cannot deadlock a strategy.
 _socket.setsockopt(zmq.RCVTIMEO, -1)
 _socket.setsockopt(zmq.SNDTIMEO, 2000)
 
@@ -80,6 +85,8 @@ _socket.connect(ZMQ_ENDPOINT)
 # -------------------------------------------------
 
 _cache = Cache(CACHE_PATH)
+
+
 def _to_number(val, is_int=False):
     if pd.isna(val):
         return None
@@ -93,21 +100,18 @@ def _to_number(val, is_int=False):
 # Helpers
 # -------------------------------------------------
 
+
 def _ok(data):
-    return {
-        "status": "ok",
-        "data": data
-    }
+    return {"status": "ok", "data": data}
+
 
 def _error(code, message=None):
-    return {
-        "status": "error",
-        "code": code,
-        "message": message
-    }
+    return {"status": "error", "code": code, "message": message}
+
 
 def _now_s():
     return time.time()
+
 
 def _normalize_timestamp(ts):
     if isinstance(ts, str):
@@ -120,9 +124,11 @@ def _normalize_timestamp(ts):
 
     return ts.replace(second=0, microsecond=0)
 
+
 # -------------------------------------------------
 # Market Data API
 # -------------------------------------------------
+
 
 class prices:
     @staticmethod
@@ -151,8 +157,10 @@ class prices:
 
             # Buffer: Fetch 2x + 10 to account for weekends/holidays/gaps
             buffer_factor = 2.5 if interval in ["1d", "1wk", "1mo"] else 4.0
-            start_date = now - (INTERVAL_TO_DELTA[interval] * int(no_of_candles * buffer_factor + 10))
-        
+            start_date = now - (
+                INTERVAL_TO_DELTA[interval] * int(no_of_candles * buffer_factor + 10)
+            )
+
             # yfinance history end is exclusive
             df = stock.history(interval=interval, start=start_date, end=now)
 
@@ -162,18 +170,20 @@ class prices:
 
             # Ensure we only have the requested number of most recent candles
             df = df.tail(no_of_candles)
-        
+
             candles = []
             for ts, row in df.iterrows():
-                candles.append({
-                    "symbol": symbol,
-                    "open": _to_number(row["Open"]),
-                    "high": _to_number(row["High"]),
-                    "low": _to_number(row["Low"]),
-                    "close": _to_number(row["Close"]),
-                    "volume": _to_number(row["Volume"], is_int=True),
-                    "timestamp": _normalize_timestamp(ts.to_pydatetime()),
-                })
+                candles.append(
+                    {
+                        "symbol": symbol,
+                        "open": _to_number(row["Open"]),
+                        "high": _to_number(row["High"]),
+                        "low": _to_number(row["Low"]),
+                        "close": _to_number(row["Close"]),
+                        "volume": _to_number(row["Volume"], is_int=True),
+                        "timestamp": _normalize_timestamp(ts.to_pydatetime()),
+                    }
+                )
 
             if field == "all":
                 return candles
@@ -190,6 +200,7 @@ class prices:
 # -------------------------------------------------
 # Trading Actions API
 # -------------------------------------------------
+
 
 class action:
     @staticmethod
@@ -217,15 +228,33 @@ class action:
             "action": action_type,
             "quantity": quantity,
             "price": price,
-            "ts": _now_s()
+            "ts": _now_s(),
         }
+        correlation_id = uuid.uuid4().hex
+        payload["correlation_id"] = correlation_id
 
         try:
             await _socket.send_json(payload)
-            response = await _socket.recv_json()
+            deadline = _now_s() + TRADE_TIMEOUT_SECONDS
+            while True:
+                remaining = deadline - _now_s()
+                if remaining <= 0:
+                    return _error("ORDER_TIMEOUT")
+                response = await asyncio.wait_for(
+                    _socket.recv_json(), timeout=remaining
+                )
+                if (
+                    isinstance(response, dict)
+                    and response.get("correlation_id") == correlation_id
+                ):
+                    break
+                logger.warning("Ignoring unmatched trade response")
         except zmq.error.Again:
             logger.error("Trade adapter send timeout")
             return _error("ENGINE_UNAVAILABLE")
+        except asyncio.TimeoutError:
+            logger.warning("Trade request timed out: %s", correlation_id)
+            return _error("ORDER_TIMEOUT")
         except Exception as e:
             logger.exception("IPC failure")
             return _error("IPC_ERROR", str(e))

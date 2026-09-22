@@ -12,15 +12,17 @@ os.environ["SIM_TRADE_ENDPOINT"] = "tcp://127.0.0.1:5555"
 
 from Handler import action
 
+
 async def run_test():
     print("Sending Buy Order for 10 AAPL...")
     response = await action.buy(10)
     print(f"Response: {response}")
-    
+
     if response.get("status") == "ok":
         print("Order Successful!")
     else:
         print("Order Failed!")
+
 
 if __name__ == "__main__":
     asyncio.run(run_test())
