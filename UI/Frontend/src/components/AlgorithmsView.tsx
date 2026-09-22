@@ -1,22 +1,18 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Code, Upload, Plus, ChevronDown, ChevronUp, History, Package, Play, Trash2, FileCode, Tag } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { apiClient } from '../lib/api-client';
+import type { Algorithm } from '../types/api';
 
-interface AlgoHistory {
-  date: string;
-  pnl: string;
-  status: 'Completed' | 'Stopped' | 'Failed';
-}
-
-interface Algo {
-  id: string;
-  name: string;
-  description: string;
-  dependencies: string[];
-  history: AlgoHistory[];
-}
-
-const AlgoWidget = ({ algo }: { algo: Algo }) => {
+const AlgoWidget = ({ 
+  algo, 
+  onDelete, 
+  onRun 
+}: { 
+  algo: Algorithm;
+  onDelete: (id: string) => void;
+  onRun: (id: string) => void;
+}) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -31,7 +27,7 @@ const AlgoWidget = ({ algo }: { algo: Algo }) => {
           </div>
           <div>
             <h3 className="text-xl font-bold text-white tracking-tight">{algo.name}</h3>
-            <p className="text-neutral-400 text-sm line-clamp-1">{algo.description}</p>
+            <p className="text-neutral-400 text-sm line-clamp-1">{algo.filename}</p>
           </div>
         </div>
 
@@ -55,11 +51,11 @@ const AlgoWidget = ({ algo }: { algo: Algo }) => {
             <div className="flex items-center gap-2">
               <span className={cn(
                 "text-sm font-bold font-mono",
-                algo.history[0]?.pnl.startsWith('+') ? "text-green-500" : "text-red-500"
+                algo.history?.[0]?.pnl?.startsWith('+') ? "text-green-500" : "text-red-500"
               )}>
-                {algo.history[0]?.pnl || 'N/A'}
+                {algo.history?.[0]?.pnl || 'N/A'}
               </span>
-              <span className="text-[10px] text-neutral-500">{algo.history[0]?.date}</span>
+              <span className="text-[10px] text-neutral-500">{algo.history?.[0]?.date}</span>
             </div>
           </div>
 
@@ -94,11 +90,11 @@ const AlgoWidget = ({ algo }: { algo: Algo }) => {
                 <h4 className="text-sm font-bold text-white uppercase tracking-wider">Run History</h4>
               </div>
               <div className="space-y-2">
-                {algo.history.map((run, i) => (
+                {algo.history?.map((run, i) => (
                   <div key={i} className="flex items-center justify-between text-sm bg-black/20 p-2.5 rounded-lg border border-white/5">
                     <span className="text-neutral-400 font-mono">{run.date}</span>
                     <div className="flex items-center gap-4">
-                      <span className={cn("font-mono font-bold", run.pnl.startsWith('+') ? "text-green-500" : "text-red-500")}>
+                      <span className={cn("font-mono font-bold", run.pnl?.startsWith('+') ? "text-green-500" : "text-red-500")}>
                         {run.pnl}
                       </span>
                       <span className={cn(
@@ -112,16 +108,25 @@ const AlgoWidget = ({ algo }: { algo: Algo }) => {
                     </div>
                   </div>
                 ))}
+                {(!algo.history || algo.history.length === 0) && (
+                  <div className="text-sm text-neutral-500 italic">No history available</div>
+                )}
               </div>
             </div>
           </div>
 
           <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-white/5">
-            <button className="flex items-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors text-sm font-medium">
+            <button 
+              onClick={(e) => { e.stopPropagation(); onDelete(algo.id); }}
+              className="flex items-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors text-sm font-medium"
+            >
               <Trash2 size={16} />
               Delete
             </button>
-            <button className="flex items-center gap-2 px-6 py-2 bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors text-sm font-bold">
+            <button 
+              onClick={(e) => { e.stopPropagation(); onRun(algo.id); }}
+              className="flex items-center gap-2 px-6 py-2 bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors text-sm font-bold"
+            >
               <Play size={16} fill="currentColor" />
               Configure & Run
             </button>
@@ -139,8 +144,13 @@ const AlgorithmsView = () => {
   const [depsInput, setDepsInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialized as empty for backend population
-  const [algos] = useState<Algo[]>([]);
+  const [algos, setAlgos] = useState<Algorithm[]>([]);
+
+  useEffect(() => {
+    apiClient.getAlgorithms()
+      .then(res => setAlgos(res.algorithms))
+      .catch(console.error);
+  }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -157,7 +167,6 @@ const AlgorithmsView = () => {
     const files = e.dataTransfer.files;
     if (files.length > 0 && files[0].name.endsWith('.py')) {
       setPendingFile(files[0]);
-      // Default name to file name without extension
       setAlgoName(files[0].name.replace('.py', '').split(/[-_]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '));
     }
   };
@@ -174,6 +183,37 @@ const AlgorithmsView = () => {
     setPendingFile(null);
     setAlgoName('');
     setDepsInput('');
+  };
+
+  const handleRegister = async () => {
+    if (!pendingFile || !algoName) return;
+    try {
+      const newAlgo = await apiClient.uploadAlgorithm(pendingFile, algoName, depsInput);
+      setAlgos(prev => [...prev, newAlgo]);
+      resetForm();
+    } catch (e) {
+      console.error('Registration failed:', e);
+    }
+  };
+
+  const handleDelete = async (algoId: string) => {
+    try {
+      await apiClient.deleteAlgorithm(algoId);
+      setAlgos(prev => prev.filter(a => a.id !== algoId));
+    } catch (e) {
+      console.error('Delete failed:', e);
+    }
+  };
+
+  const handleRun = async (algoId: string) => {
+    try {
+      const symbol = window.prompt("Enter symbol to run against:", "AAPL");
+      if (symbol) {
+        await apiClient.runAlgorithm(algoId, symbol);
+      }
+    } catch (e) {
+      console.error('Run failed:', e);
+    }
   };
 
   return (
@@ -280,7 +320,10 @@ const AlgorithmsView = () => {
               >
                 Cancel
               </button>
-              <button className="bg-green-600 hover:bg-green-700 text-white font-bold px-10 py-3 rounded-xl transition-all shadow-lg shadow-green-600/20 flex items-center gap-2 active:scale-95">
+              <button 
+                onClick={handleRegister}
+                className="bg-green-600 hover:bg-green-700 text-white font-bold px-10 py-3 rounded-xl transition-all shadow-lg shadow-green-600/20 flex items-center gap-2 active:scale-95"
+              >
                 <Plus size={18} />
                 <span>Register Algorithm</span>
               </button>
@@ -296,7 +339,7 @@ const AlgorithmsView = () => {
         </div>
         <div className="flex flex-col gap-4">
           {algos.map(algo => (
-            <AlgoWidget key={algo.id} algo={algo} />
+            <AlgoWidget key={algo.id} algo={algo} onDelete={handleDelete} onRun={handleRun} />
           ))}
         </div>
       </section>

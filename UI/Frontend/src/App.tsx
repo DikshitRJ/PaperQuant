@@ -8,25 +8,38 @@ import SetupView from './components/SetupView';
 import HomeView from './components/HomeView';
 import AlgorithmsView from './components/AlgorithmsView';
 import SettingsView from './components/SettingsView';
-import { useBackend } from './hooks/useBackend';
+import { apiClient } from './lib/api-client';
 import { usePaperQuant } from './context/PaperQuantContext';
+import type { SessionStartRequest } from './types/api';
 
 function App() {
   const [view, setView] = useState('home'); 
-  const { isReady, callBackend } = useBackend();
   const { strategyName, stats } = usePaperQuant();
 
-  const handleStartSession = () => {
-    setView('active');
+  const handleStartSession = async (config: SessionStartRequest) => {
+    try {
+      await apiClient.startSession(config);
+      setView('active');
+    } catch (e) {
+      console.error('Failed to start session:', e);
+    }
   };
 
   const handleStopSession = async () => {
-    await callBackend(api => api.stop_session());
-    setView('setup');
+    try {
+      await apiClient.stopSession();
+      setView('setup');
+    } catch (e) {
+      console.error('Failed to stop session:', e);
+    }
   };
 
   const handleResetSession = async () => {
-    await callBackend(api => api.reset_session());
+    try {
+      await apiClient.resetSession();
+    } catch (e) {
+      console.error('Failed to reset session:', e);
+    }
   };
 
   return (

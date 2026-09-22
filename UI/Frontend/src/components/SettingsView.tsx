@@ -1,16 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Globe, 
   Zap, 
   Bell, 
   Cpu, 
-  ChevronRight,
-  TrendingUp,
-  Building2,
-  Tag
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePaperQuant } from '../context/PaperQuantContext';
+import { apiClient } from '../lib/api-client';
+import { Settings, HealthResponse } from '../types/api';
 
 interface SettingSectionProps {
   icon: React.ElementType;
@@ -20,32 +19,24 @@ interface SettingSectionProps {
 }
 
 const SettingSection = ({ icon: Icon, title, description, children }: SettingSectionProps) => (
-  <div className="bg-[#171717]/40 backdrop-blur-md border border-neutral-500/20 rounded-2xl overflow-hidden mb-6">
-    <div className="p-6 border-b border-white/5 flex items-start gap-4">
-      <div className="size-10 bg-white/5 rounded-lg flex items-center justify-center border border-white/10 shrink-0">
-        <Icon size={20} className="text-neutral-400" />
+  <section className="mb-8 bg-white/5 border border-white/10 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+    <div className="flex items-center gap-3 mb-6">
+      <div className="p-2 bg-white/10 rounded-lg">
+        <Icon size={20} className="text-neutral-200" />
       </div>
       <div>
-        <h3 className="text-lg font-bold text-white tracking-tight">{title}</h3>
-        <p className="text-neutral-500 text-sm">{description}</p>
+        <h2 className="text-xl font-semibold text-white tracking-tight">{title}</h2>
+        <p className="text-sm text-neutral-400">{description}</p>
       </div>
     </div>
-    <div className="p-6 space-y-6">
-      {children}
-    </div>
-  </div>
+    {children}
+  </section>
 );
 
-interface ToggleProps {
-  label: string;
-  enabled: boolean;
-  onChange: (val: boolean) => void;
-}
-
-const Toggle = ({ label, enabled, onChange }: ToggleProps) => (
-  <div className="flex items-center justify-between">
+const Toggle = ({ enabled, onChange, label }: { enabled: boolean, onChange: (val: boolean) => void, label: string }) => (
+  <div className="flex items-center justify-between py-2">
     <span className="text-neutral-300 text-sm font-medium">{label}</span>
-    <button 
+    <button
       onClick={() => onChange(!enabled)}
       className={cn(
         "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
@@ -65,20 +56,39 @@ const Toggle = ({ label, enabled, onChange }: ToggleProps) => (
 const SettingsView = () => {
   const { sendNotification } = usePaperQuant();
   const [currency, setCurrency] = useState('USD');
-  const [settings, setSettings] = useState({
-    autoClearLogs: true,
-    systemAlerts: true,
-    soundEffects: false,
-  });
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  
+  const [localFontSize, setLocalFontSize] = useState('14px');
+
+  useEffect(() => {
+    apiClient.getSettings().then(setSettings).catch(console.error);
+    apiClient.getHealth().then(setHealth).catch(console.error);
+  }, []);
+
+  const updateSetting = async (key: string, value: any) => {
+    if (!settings) return;
+    try {
+      const updated = await apiClient.updateSettings({ [key]: value });
+      setSettings(updated);
+    } catch (e) {
+      console.error('Failed to update settings', e);
+    }
+  };
 
   const handleToggleAlerts = (val: boolean) => {
-    setSettings({...settings, systemAlerts: val});
+    updateSetting('system_alerts', val);
     // Call global setter exposed to window
     (window as any).setNotificationsEnabled?.(val);
     
     if (val) {
       sendNotification("System Alerts Enabled", "You will now receive trade and system notifications.");
     }
+  };
+
+  const handleFontSizeChange = (size: string) => {
+    setLocalFontSize(size);
+    console.log(`Setting font size to ${size}`);
   };
 
   // Generic flat fee defaults based on currency
@@ -173,24 +183,33 @@ const SettingsView = () => {
         <div className="space-y-4 max-w-md">
           <Toggle 
             label="Auto-clear logs on new session" 
-            enabled={settings.autoClearLogs} 
-            onChange={(val) => setSettings({...settings, autoClearLogs: val})} 
+            enabled={settings?.auto_clear_logs ?? true} 
+            onChange={(val) => updateSetting('auto_clear_logs', val)} 
           />
           <Toggle 
             label="Enable desktop system alerts" 
-            enabled={settings.systemAlerts} 
+            enabled={settings?.system_alerts ?? true} 
             onChange={handleToggleAlerts} 
           />
           <Toggle 
             label="Sound effects for trades" 
-            enabled={settings.soundEffects} 
-            onChange={(val) => setSettings({...settings, soundEffects: val})} 
+            enabled={settings?.sound_effects ?? false} 
+            onChange={(val) => updateSetting('sound_effects', val)} 
           />
           <div className="flex items-center justify-between pt-2">
             <span className="text-neutral-300 text-sm font-medium">Terminal Font Size</span>
             <div className="flex gap-2">
               {['12px', '14px', '16px'].map((size) => (
-                <button key={size} className="px-3 py-1 bg-white/5 border border-white/10 rounded-md text-[10px] text-neutral-400 hover:text-white transition-colors">
+                <button 
+                  key={size}
+                  onClick={() => handleFontSizeChange(size)}
+                  className={cn(
+                    "px-3 py-1 border rounded-md text-[10px] transition-colors",
+                    localFontSize === size 
+                      ? "bg-white/20 border-white/30 text-white" 
+                      : "bg-white/5 border-white/10 text-neutral-400 hover:text-white"
+                  )}
+                >
                   {size}
                 </button>
               ))}
@@ -208,16 +227,26 @@ const SettingsView = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between bg-black/20 p-4 rounded-xl border border-white/5">
             <div className="flex items-center gap-3">
-              <div className="size-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+              <div className={cn(
+                "size-2 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]",
+                health ? "bg-green-500" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+              )} />
               <span className="text-sm text-neutral-200 font-medium">Python Engine Status</span>
             </div>
-            <span className="text-xs text-green-500 font-mono font-bold">CONNECTED (12ms)</span>
+            <span className={cn(
+              "text-xs font-mono font-bold",
+              health ? "text-green-500" : "text-red-500"
+            )}>
+              {health ? `CONNECTED (v${health.version})` : 'DISCONNECTED'}
+            </span>
           </div>
           
           <div className="flex items-center justify-between px-4">
             <div className="flex flex-col">
               <span className="text-white text-sm font-bold">PaperQuant Version</span>
-              <span className="text-neutral-500 text-xs">v1.0.0 (Production Build)</span>
+              <span className="text-neutral-500 text-xs">
+                {health?.version ? `v${health.version}` : 'Unknown'} (Production Build)
+              </span>
             </div>
             <button className="text-xs text-white/40 hover:text-white flex items-center gap-1 transition-colors uppercase font-bold tracking-widest">
               Check for updates
