@@ -2,7 +2,7 @@ import React from 'react';
 import { usePaperQuant } from '../context/PaperQuantContext';
 
 export const ExecutionTerminal = () => {
-  const { logs } = usePaperQuant();
+  const { logs, setLogs } = usePaperQuant();
 
   return (
     <div className="w-full mt-8 pb-8">
@@ -18,7 +18,9 @@ export const ExecutionTerminal = () => {
             <div className="size-3 bg-neutral-700 rounded-full" />
           </div>
           <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest">Strategy_Engine_V1.0</span>
-          <button className="bg-neutral-700/50 border border-neutral-600/30 rounded px-2 py-0.5 text-[10px] text-neutral-400 hover:text-white transition-colors">
+          <button 
+            onClick={() => setLogs([])}
+            className="bg-neutral-700/50 border border-neutral-600/30 rounded px-2 py-0.5 text-[10px] text-neutral-400 hover:text-white transition-colors">
             Clear
           </button>
         </div>

@@ -1,64 +1,32 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-
-interface Position {
-  ticker: string;
-  pnl: string;
-  invested: string;
-  current: string;
-  initials: string;
-}
-
-interface LogEntry {
-  time: string;
-  content: string;
-  color: string;
-}
-
-interface RecentExecution {
-  name: string;
-  pnl: string;
-  winRate: string;
-  lastRun: string;
-  status: 'profit' | 'loss';
-}
-
-interface SystemPulseEntry {
-  time: string;
-  msg: string;
-  color: string;
-}
-
-interface GlobalStats {
-  totalPnl: string;
-  pnlPercent: string;
-  activeAlgos: string;
-  algoRuntime: string;
-  pnlTrend: 'up' | 'down' | 'none';
-}
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { useWebSocket } from '../hooks/useWebSocket';
+import type { 
+  Position, 
+  LogEntry, 
+  GlobalStats, 
+  SessionStats, 
+  RecentExecution, 
+  SystemPulseEntry 
+} from '../types/api';
 
 interface PaperQuantContextType {
   // Active Session state
   positions: Position[];
   logs: LogEntry[];
-  stats: {
-    pnl: string;
-    invested: string;
-    current: string;
-    uptime: string;
-    trend: 'up' | 'down' | 'none';
-  };
+  stats: SessionStats;
   strategyName: string;
   
   // Home (Command Center) state
   globalStats: GlobalStats;
   recentExecutions: RecentExecution[];
   systemPulse: SystemPulseEntry[];
-  chartPath: string; // The "d" attribute for the SVG path
+  chartPath: string;
   
   // Setters
   setPositions: (p: Position[]) => void;
+  setLogs: (logs: LogEntry[] | ((prev: LogEntry[]) => LogEntry[])) => void;
   addLog: (log: LogEntry) => void;
-  setStats: (stats: PaperQuantContextType['stats']) => void;
+  setStats: (stats: SessionStats) => void;
   setStrategyName: (name: string) => void;
   
   setGlobalStats: (s: GlobalStats) => void;
@@ -73,11 +41,13 @@ interface PaperQuantContextType {
 const PaperQuantContext = createContext<PaperQuantContextType | undefined>(undefined);
 
 export const PaperQuantProvider = ({ children }: { children: ReactNode }) => {
+  const { isConnected, on } = useWebSocket();
+
   // Active Session state
   const [positions, setPositions] = useState<Position[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [strategyName, setStrategyName] = useState('-');
-  const [stats, setStats] = useState<PaperQuantContextType['stats']>({
+  const [stats, setStats] = useState<SessionStats>({
     pnl: '-',
     invested: '-',
     current: '-',
@@ -87,26 +57,26 @@ export const PaperQuantProvider = ({ children }: { children: ReactNode }) => {
 
   // Home state
   const [globalStats, setGlobalStats] = useState<GlobalStats>({
-    totalPnl: '$0.00',
-    pnlPercent: '0%',
-    activeAlgos: '0',
-    algoRuntime: '0h',
-    pnlTrend: 'none'
+    total_pnl: '$0.00',
+    pnl_percent: '0%',
+    active_algos: '0',
+    algo_runtime: '0h',
+    pnl_trend: 'none'
   });
   const [recentExecutions, setRecentExecutions] = useState<RecentExecution[]>([]);
   const [systemPulse, setSystemPulse] = useState<SystemPulseEntry[]>([]);
   const [chartPath, setChartPath] = useState('');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  const addLog = (log: LogEntry) => {
-    setLogs(prev => [...prev.slice(-100), log]);
-  };
+  const addLog = useCallback((log: LogEntry) => {
+    setLogs(prev => [...prev.slice(-99), log]);
+  }, []);
 
-  const addSystemPulse = (entry: SystemPulseEntry) => {
+  const addSystemPulse = useCallback((entry: SystemPulseEntry) => {
     setSystemPulse(prev => [entry, ...prev.slice(0, 19)]);
-  };
+  }, []);
 
-  const sendNotification = (title: string, body: string) => {
+  const sendNotification = useCallback((title: string, body: string) => {
     if (!notificationsEnabled) return;
     
     if (!("Notification" in window)) {
@@ -123,38 +93,48 @@ export const PaperQuantProvider = ({ children }: { children: ReactNode }) => {
         }
       });
     }
-  };
+  }, [notificationsEnabled]);
 
-  // Optimization for pywebview: Expose these to global window
+  // Register WebSocket handlers
   useEffect(() => {
-    (window as any).updatePositions = setPositions;
-    (window as any).addLog = addLog;
-    (window as any).updateStats = setStats;
-    (window as any).updateStrategyName = setStrategyName;
-    (window as any).clearLogs = () => setLogs([]);
-    (window as any).sendNotification = sendNotification;
-    (window as any).setNotificationsEnabled = setNotificationsEnabled;
-
-    (window as any).updateGlobalStats = setGlobalStats;
-    (window as any).updateRecentExecutions = setRecentExecutions;
-    (window as any).addSystemPulse = addSystemPulse;
-    (window as any).updateChartPath = setChartPath;
-
-    return () => {
-      const globals = [
-        'updatePositions', 'addLog', 'updateStats', 'updateStrategyName', 
-        'clearLogs', 'sendNotification', 'setNotificationsEnabled',
-        'updateGlobalStats', 'updateRecentExecutions', 'addSystemPulse', 'updateChartPath'
-      ];
-      globals.forEach(g => delete (window as any)[g]);
-    };
-  }, [notificationsEnabled]); // Re-bind when enabled state changes to ensure closure has latest state
+    const unsubs = [
+      on('positions_update', (data: any) => setPositions(data.positions || [])),
+      on('log', (data: any) => addLog(data)),
+      on('stats_update', (data: any) => {
+        if (data.session) setStats(data.session);
+        if (data.global) setGlobalStats(data.global);
+      }),
+      on('system_pulse', (data: any) => addSystemPulse(data)),
+      on('strategy_update', (data: any) => setStrategyName(data.name || '-')),
+      on('chart_update', (data: any) => {
+        // Assume data contains { timestamps, pnl_values }
+        if (data.pnl_values && Array.isArray(data.pnl_values)) {
+          const pnlValues = data.pnl_values;
+          if (pnlValues.length < 2) {
+            setChartPath('');
+          } else {
+            const maxVal = Math.max(...pnlValues.map(Math.abs), 1);
+            const points = pnlValues.map((v: number, i: number) => {
+              const x = (i / (pnlValues.length - 1)) * 100;
+              const y = 20 - (v / maxVal) * 18;  // Center at y=20, scale ±18
+              return `${x},${y}`;
+            });
+            setChartPath(`M ${points.join(' L ')}`);
+          }
+        }
+      }),
+      on('trade_executed', (data: any) => {
+        sendNotification(`Trade Executed: ${data.side} ${data.qty} ${data.symbol}`, `Price: $${data.price}`);
+      }),
+    ];
+    return () => unsubs.forEach(unsub => unsub());
+  }, [on, addLog, addSystemPulse, sendNotification]);
 
   return (
     <PaperQuantContext.Provider value={{ 
       positions, logs, stats, strategyName,
       globalStats, recentExecutions, systemPulse, chartPath,
-      setPositions, addLog, setStats, setStrategyName,
+      setPositions, setLogs, addLog, setStats, setStrategyName,
       setGlobalStats, setRecentExecutions, addSystemPulse, setChartPath,
       sendNotification
     }}>

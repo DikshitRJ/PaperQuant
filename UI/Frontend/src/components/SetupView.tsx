@@ -1,24 +1,27 @@
-import React from 'react';
-import { Play, Search, Plus, Trash2, Wallet, Layers } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Play, Search, Plus, Trash2, Layers } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { apiClient } from '../lib/api-client';
+import type { Algorithm, SessionStartRequest, WatchlistItem } from '../types/api';
 
 interface SetupViewProps {
-  onStart: () => void;
-}
-
-interface WatchlistItem {
-  ticker: string;
-  capital: string;
+  onStart: (config: SessionStartRequest) => void;
 }
 
 const SetupView = ({ onStart }: SetupViewProps) => {
-  const [watchlist, setWatchlist] = React.useState<WatchlistItem[]>([]);
-  const [tickerInput, setTickerInput] = React.useState('');
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [tickerInput, setTickerInput] = useState('');
+  const [algorithms, setAlgorithms] = useState<Algorithm[]>([]);
+  const [selectedStrategy, setSelectedStrategy] = useState<string>('');
+
+  useEffect(() => {
+    apiClient.getAlgorithms().then(res => setAlgorithms(res.algorithms)).catch(console.error);
+  }, []);
 
   const addTicker = () => {
     const ticker = tickerInput.toUpperCase();
     if (ticker && !watchlist.some(item => item.ticker === ticker)) {
-      setWatchlist([...watchlist, { ticker, capital: '1000' }]);
+      setWatchlist([...watchlist, { ticker, capital: 1000 }]);
       setTickerInput('');
     }
   };
@@ -29,8 +32,15 @@ const SetupView = ({ onStart }: SetupViewProps) => {
 
   const updateCapital = (ticker: string, newCapital: string) => {
     setWatchlist(watchlist.map(item => 
-      item.ticker === ticker ? { ...item, capital: newCapital } : item
+      item.ticker === ticker ? { ...item, capital: parseFloat(newCapital) || 0 } : item
     ));
+  };
+
+  const handleStart = () => {
+    onStart({
+      watchlist: watchlist,
+      strategy_id: selectedStrategy || undefined,
+    });
   };
 
   return (
@@ -51,9 +61,15 @@ const SetupView = ({ onStart }: SetupViewProps) => {
           </div>
           <div className="bg-[#171717]/40 backdrop-blur-md border border-neutral-500/40 rounded-xl p-4 md:p-6 shadow-xl">
             <label className="block text-neutral-400 text-sm font-medium mb-2">Select a script...</label>
-            <select defaultValue="" className="w-full bg-[#262626] border border-neutral-500/40 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20 transition-all appearance-none text-sm md:text-base">
-              <option value="" disabled>Select a strategy...</option>
-              {/* Options will be populated from backend */}
+            <select 
+              value={selectedStrategy}
+              onChange={e => setSelectedStrategy(e.target.value)}
+              className="w-full bg-[#262626] border border-neutral-500/40 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20 transition-all appearance-none text-sm md:text-base"
+            >
+              <option value="">Manual Trading (No Strategy)</option>
+              {algorithms.map(algo => (
+                <option key={algo.id} value={algo.id}>{algo.name}</option>
+              ))}
             </select>
           </div>
 
@@ -131,7 +147,7 @@ const SetupView = ({ onStart }: SetupViewProps) => {
 
         <div className="pt-8 flex flex-col sm:flex-row justify-end gap-4">
           <button 
-            onClick={onStart}
+            onClick={handleStart}
             disabled={watchlist.length === 0}
             className="flex items-center justify-center gap-3 bg-green-600 text-white font-bold px-10 py-4 rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none w-full sm:w-auto"
           >

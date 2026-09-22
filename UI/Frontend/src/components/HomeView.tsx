@@ -41,8 +41,24 @@ const RecentAlgoCard = ({ name, pnl, winRate, lastRun, status }: RecentAlgoProps
   </div>
 );
 
+const generateChartPath = (pnlValues: number[]): string => {
+  if (!pnlValues || pnlValues.length < 2) return '';
+  const maxVal = Math.max(...pnlValues.map(Math.abs), 1);
+  const points = pnlValues.map((v, i) => {
+    const x = (i / (pnlValues.length - 1)) * 100;
+    const y = 20 - (v / maxVal) * 18;  // Center at y=20, scale ±18
+    return `${x},${y}`;
+  });
+  return `M ${points.join(' L ')}`;
+};
+
 const HomeView = () => {
-  const { globalStats, recentExecutions, systemPulse, chartPath } = usePaperQuant();
+  const { globalStats, recentExecutions, systemPulse, chartPath: contextChartPath, ...contextRest } = usePaperQuant();
+  const [showHistoryModal, setShowHistoryModal] = React.useState(false);
+  const chartData = (contextRest as any).chartData;
+
+  // If chartData is available from context use it to generate SVG path, else fallback to contextChartPath
+  const chartPath = chartData && chartData.length > 0 ? generateChartPath(chartData) : contextChartPath;
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-8 animate-in fade-in duration-700">
@@ -58,20 +74,20 @@ const HomeView = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <StatCard 
           label="Total P&L" 
-          value={globalStats.totalPnl} 
-          subValue={globalStats.pnlPercent} 
+          value={globalStats.total_pnl} 
+          subValue={globalStats.pnl_percent} 
           icon={TrendingUp} 
-          trend={globalStats.pnlTrend !== 'none' ? globalStats.pnlTrend : undefined} 
+          trend={globalStats.pnl_trend !== 'none' ? globalStats.pnl_trend : undefined} 
         />
         <StatCard 
           label="Active Algos" 
-          value={globalStats.activeAlgos} 
+          value={globalStats.active_algos} 
           subValue="Standby" 
           icon={Play} 
         />
         <StatCard 
           label="Algo Runtime" 
-          value={globalStats.algoRuntime} 
+          value={globalStats.algo_runtime} 
           subValue="Total Session Time" 
           icon={Clock} 
         />
@@ -139,10 +155,10 @@ const HomeView = () => {
           <div className="absolute top-24 right-8 flex flex-col items-end">
              <div className={cn(
                "font-mono text-2xl font-bold flex items-center gap-1 animate-pulse",
-               globalStats.pnlTrend === 'up' ? "text-green-500" : globalStats.pnlTrend === 'down' ? "text-red-500" : "text-neutral-400"
+               globalStats.pnl_trend === 'up' ? "text-green-500" : globalStats.pnl_trend === 'down' ? "text-red-500" : "text-neutral-400"
              )}>
-               <ArrowUpRight size={24} className={globalStats.pnlTrend === 'down' ? "rotate-90" : ""} />
-               {globalStats.totalPnl}
+               <ArrowUpRight size={24} className={globalStats.pnl_trend === 'down' ? "rotate-90" : ""} />
+               {globalStats.total_pnl}
              </div>
              <span className="text-neutral-600 text-[10px] font-bold uppercase tracking-widest">Global P&L</span>
           </div>
@@ -178,7 +194,11 @@ const HomeView = () => {
             <Clock size={18} className="text-neutral-400" />
             <h2 className="text-white font-bold">Recent Executions</h2>
           </div>
-          <button className="text-neutral-500 hover:text-white text-xs font-bold uppercase transition-colors">View All History</button>
+          <button 
+            onClick={() => setShowHistoryModal(true)}
+            className="text-neutral-500 hover:text-white text-xs font-bold uppercase transition-colors">
+            View All History
+          </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {recentExecutions.length > 0 ? (
@@ -193,6 +213,32 @@ const HomeView = () => {
           )}
         </div>
       </section>
+
+      {/* History Modal (Basic implementation) */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#171717] border border-neutral-700 rounded-2xl w-full max-w-2xl p-6 relative">
+            <button 
+              onClick={() => setShowHistoryModal(false)}
+              className="absolute top-4 right-4 text-neutral-500 hover:text-white"
+            >
+              ✕
+            </button>
+            <h2 className="text-xl font-bold text-white mb-4">Execution History</h2>
+            <div className="space-y-2 text-sm text-neutral-400 max-h-[60vh] overflow-y-auto">
+              {recentExecutions.length > 0 ? recentExecutions.map((algo, i) => (
+                <div key={i} className="flex justify-between items-center bg-white/5 p-3 rounded">
+                  <span className="font-mono text-white">{algo.name}</span>
+                  <span className={algo.status === 'profit' ? 'text-green-500' : 'text-red-500'}>{algo.pnl}</span>
+                  <span>{algo.lastRun}</span>
+                </div>
+              )) : (
+                <p className="text-center italic mt-10">No execution history available.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

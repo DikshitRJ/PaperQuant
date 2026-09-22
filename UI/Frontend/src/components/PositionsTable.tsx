@@ -33,7 +33,7 @@ export const PositionsTable = () => {
                   </td>
                   <td className={cn(
                     "px-6 py-4 text-sm font-semibold",
-                    pos.pnl.startsWith('+') ? "text-green-500" : "text-red-500"
+                    (pos.pnl?.startsWith('+') ?? false) ? "text-green-500" : "text-red-500"
                   )}>
                     {pos.pnl}
                   </td>
