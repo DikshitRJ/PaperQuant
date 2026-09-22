@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WebSocketEvent",
+  "type": "object",
+  "properties": {
+    "type": { "type": "string" },
+    "data": { "type": "object" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "required": ["type", "data", "timestamp"]
+}

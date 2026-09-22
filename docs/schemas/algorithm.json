@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Algorithm",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "filename": { "type": "string" },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "pnl": { "type": "string" },
+          "status": { "type": "string", "enum": ["Completed", "Stopped", "Failed"] },
+          "duration_seconds": { "type": "integer" }
+        },
+        "required": ["run_id", "date", "pnl", "status", "duration_seconds"]
+      }
+    }
+  },
+  "required": ["id", "name", "filename", "dependencies", "created_at", "history"]
+}

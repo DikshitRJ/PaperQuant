@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Position",
+  "type": "object",
+  "properties": {
+    "ticker": { "type": "string" },
+    "initials": { "type": "string" },
+    "qty": { "type": "integer" },
+    "avg_price": { "type": "number" },
+    "current_price": { "type": "number" },
+    "invested": { "type": "string" },
+    "current": { "type": "string" },
+    "pnl": { "type": "string" },
+    "pnl_percent": { "type": "string" },
+    "strategy_id": { "type": "string" }
+  },
+  "required": [
+    "ticker", "initials", "qty", "avg_price", "current_price",
+    "invested", "current", "pnl", "pnl_percent", "strategy_id"
+  ]
+}
