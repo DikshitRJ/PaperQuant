@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 
 try:
@@ -22,12 +23,14 @@ async def prices(request: Request):
                 values = cache.get(key, [])
                 if values:
                     latest = values[-1]
+                    ts = latest.get("ts")
+                    if isinstance(ts, (int, float)):
+                        ts = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
                     result[str(key).split(":", 1)[1]] = {
                         "price": latest["price"],
-                        "timestamp": latest.get("ts"),
+                        "timestamp": ts,
                         "source": "live",
                     }
         return {"prices": result}
     finally:
         cache.close()
-

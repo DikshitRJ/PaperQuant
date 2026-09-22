@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import uuid
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from ..schemas import AlgorithmRunRequest
+from ..websocket import manager as ws_manager
 
 router = APIRouter(prefix="/algorithms")
 
@@ -47,7 +47,6 @@ async def run(algorithm_id: str, payload: AlgorithmRunRequest, request: Request)
         return JSONResponse(status_code=404, content={"error": "algorithm_not_found", "message": "Algorithm not found."})
     if not manager.active_session:
         return JSONResponse(status_code=400, content={"error": "no_active_session", "message": "Start a session first."})
-    run_id = f"run_{uuid.uuid4().hex[:8]}"
     started = manager.process_manager.start_strategy(
         algorithm_id,
         manager.algorithm_store.get_script_path(algorithm_id),
@@ -58,15 +57,23 @@ async def run(algorithm_id: str, payload: AlgorithmRunRequest, request: Request)
             status_code=409,
             content={"error": "algorithm_already_running", "message": "Algorithm is already running."},
         )
-    return {"status": "started", "run_id": run_id, "algorithm_id": algorithm_id, "symbol": payload.symbol.upper()}
+    run = manager.algorithm_store.start_run(algorithm_id)
+    await ws_manager.broadcast("strategy_update", {"name": algo["name"], "status": "running"})
+    return {"status": "started", "run_id": run["run_id"], "algorithm_id": algorithm_id, "symbol": payload.symbol.upper()}
 
 
 @router.post("/{algorithm_id}/stop")
 async def stop(algorithm_id: str, request: Request):
     manager = request.app.state.session_manager
-    if not manager.algorithm_store.get(algorithm_id):
+    algo = manager.algorithm_store.get(algorithm_id)
+    if not algo:
         return JSONResponse(status_code=404, content={"error": "algorithm_not_found", "message": "Algorithm not found."})
     names = [name for name in manager.process_manager.processes if name.startswith(f"strategy_{algorithm_id}_")]
     for name in names:
         manager.process_manager.stop_process(name)
-    return {"status": "stopped", "run_id": f"run_{algorithm_id}"}
+    run = manager.algorithm_store.find_active_run(algorithm_id)
+    run_id = run["run_id"] if run else f"run_{algorithm_id}"
+    if run:
+        manager.algorithm_store.finish_run(run_id, status="Stopped")
+    await ws_manager.broadcast("strategy_update", {"name": algo["name"], "status": "stopped"})
+    return {"status": "stopped", "run_id": run_id}

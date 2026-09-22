@@ -40,7 +40,7 @@ def test_enriches_long_position_with_live_price_and_pnl():
         "current_price": 105.0,
         "invested": "$1,000.00",
         "current": "$1,050.00",
-        "pnl": "+50.00",
+        "pnl": "+$50.00",
         "pnl_percent": "+5.00%",
         "strategy_id": "rsi",
     }
@@ -67,5 +67,5 @@ def test_uses_average_price_when_no_live_tick_exists():
     position = service.get_enriched_positions()[0]
 
     assert position["current_price"] == 50.0
-    assert position["pnl"] == "+0.00"
+    assert position["pnl"] == "+$0.00"
     assert position["pnl_percent"] == "+0.00%"
