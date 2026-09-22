@@ -1,8 +1,10 @@
 import os
 import sys
+import asyncio
 import zmq
 import time
 import logging
+import uuid
 from diskcache import Cache
 from datetime import datetime, timezone, timedelta
 import yfinance as yf
@@ -21,6 +23,7 @@ CACHE_PATH = os.getenv("SIM_CACHE_PATH", "./Temporary/cache_candles")
 
 STRATEGY_ID = os.getenv("SIM_STRATEGY_ID")
 SYMBOL = os.getenv("SIM_SYMBOL")
+TRADE_TIMEOUT_SECONDS = float(os.getenv("SIM_TRADE_TIMEOUT_SECONDS", "30"))
 
 if not STRATEGY_ID:
     raise RuntimeError("SIM_STRATEGY_ID must be set for each strategy process")
@@ -69,7 +72,8 @@ _socket = _context.socket(zmq.DEALER)
 # Explicit identity for ROUTER
 _socket.setsockopt(zmq.IDENTITY, STRATEGY_ID.encode())
 
-# High/Infinite timeout behavior since limit orders block indefinitely
+# The request wait is bounded in _send.  Keep the socket receive operation
+# cancellable by asyncio so a timed-out limit order cannot deadlock a strategy.
 _socket.setsockopt(zmq.RCVTIMEO, -1)
 _socket.setsockopt(zmq.SNDTIMEO, 2000)
 
@@ -219,13 +223,31 @@ class action:
             "price": price,
             "ts": _now_s()
         }
+        correlation_id = uuid.uuid4().hex
+        payload["correlation_id"] = correlation_id
 
         try:
             await _socket.send_json(payload)
-            response = await _socket.recv_json()
+            deadline = _now_s() + TRADE_TIMEOUT_SECONDS
+            while True:
+                remaining = deadline - _now_s()
+                if remaining <= 0:
+                    return _error("ORDER_TIMEOUT")
+                response = await asyncio.wait_for(
+                    _socket.recv_json(), timeout=remaining
+                )
+                if (
+                    isinstance(response, dict)
+                    and response.get("correlation_id") == correlation_id
+                ):
+                    break
+                logger.warning("Ignoring unmatched trade response")
         except zmq.error.Again:
             logger.error("Trade adapter send timeout")
             return _error("ENGINE_UNAVAILABLE")
+        except asyncio.TimeoutError:
+            logger.warning("Trade request timed out: %s", correlation_id)
+            return _error("ORDER_TIMEOUT")
         except Exception as e:
             logger.exception("IPC failure")
             return _error("IPC_ERROR", str(e))

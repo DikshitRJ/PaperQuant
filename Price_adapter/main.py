@@ -10,7 +10,12 @@ async def periodic_fetch_and_store(stocklist: list[str]):
 
     while True:
         try:
-            updated_prices = fetch_multiple_candles(stocklist, interval='1m', lookback_minutes=3)
+            updated_prices = await asyncio.to_thread(
+                fetch_multiple_candles,
+                stocklist,
+                interval='1m',
+                lookback_minutes=3,
+            )
 
             imt_sqlite(list(updated_prices.values()))
             for ticker, candle_data in updated_prices.items():

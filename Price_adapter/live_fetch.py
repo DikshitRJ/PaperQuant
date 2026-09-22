@@ -2,6 +2,9 @@ import yfinance as yf
 from diskcache import Cache
 import asyncio
 import os
+import time
+
+
 def init_cache():
     return Cache("./Temporary/cache_liveprices", timeout=30)
 
@@ -26,13 +29,9 @@ async def mock_generator(cache, stocklist):
             cache.set(cache_key, current_data)
         await asyncio.sleep(1)
 
-import time
-
 async def main(stocklist):
     cache = init_cache()
-    
-    # Start mock generator as a background task
-    mock_task = asyncio.create_task(mock_generator(cache, stocklist))
+    mock_task = None
     
     async def handle(message):
         # If we get real data, we could potentially stop/pause the mock,
@@ -56,11 +55,11 @@ async def main(stocklist):
                 await ws.listen(handle)
     except Exception as e:
         print(f"WebSocket unavailable (likely market closed): {e}")
-        # Keep the event loop running so mock_generator continues
-        while True:
-            await asyncio.sleep(3600)
+        mock_task = asyncio.create_task(mock_generator(cache, stocklist))
+        await mock_task
     finally:
-        mock_task.cancel()
+        if mock_task is not None:
+            mock_task.cancel()
         cache.close()
 
 

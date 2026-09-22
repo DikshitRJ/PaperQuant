@@ -1,4 +1,5 @@
 from .Candle_fetcher import candle_list
+import numpy as np
 import pandas as pd
 
 # Trend indicators identify the direction and strength of a market trend.

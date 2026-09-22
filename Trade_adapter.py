@@ -51,6 +51,12 @@ def _error(code, message=None):
         "message": message
     }
 
+def _with_correlation(response, payload):
+    correlation_id = payload.get("correlation_id")
+    if correlation_id:
+        response["correlation_id"] = correlation_id
+    return response
+
 def _now_s():
     return time.time()
 
@@ -179,7 +185,13 @@ def main():
     poller = zmq.Poller()
     poller.register(socket, zmq.POLLIN)
     
-    pending_orders = [] # List of dicts
+    pending_orders = state_cache.get("pending_orders", [])
+    if not isinstance(pending_orders, list):
+        pending_orders = []
+    logger.info("Restored %d pending order(s)", len(pending_orders))
+
+    def persist_pending_orders():
+        state_cache.set("pending_orders", pending_orders, expire=None)
     
     logger.info(f"Writing history to: {ORDER_HISTORY_FILE}")
     logger.info("Trade Adapter is running and listening for orders.")
@@ -215,7 +227,7 @@ def main():
                                 "current_avg_price": new_avg,
                                 "ts": _now_s()
                             })
-                            socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
+                            socket.send_multipart([identity, json.dumps(_with_correlation(response_data, order)).encode('utf-8')])
                             executed = True
                         elif action_type == "sell" and live_price >= requested_price:
                             new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "sell", quantity, live_price)
@@ -230,13 +242,14 @@ def main():
                                 "current_avg_price": new_avg,
                                 "ts": _now_s()
                             })
-                            socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
+                            socket.send_multipart([identity, json.dumps(_with_correlation(response_data, order)).encode('utf-8')])
                             executed = True
                             
                     if not executed:
                         still_pending.append(pending_item)
                 
                 pending_orders = still_pending
+                persist_pending_orders()
                 
                 # 2. Poll for new messages (100ms timeout)
                 events = dict(poller.poll(100))
@@ -288,6 +301,7 @@ def main():
                         if not can_execute_immediately:
                             # Queue order
                             pending_orders.append({"identity": identity, "payload": payload})
+                            persist_pending_orders()
                             logger.info(f"ORDER QUEUED: {action_type} {quantity} {symbol} @ limit {requested_price} for {strategy_id}")
                             continue
                     
@@ -296,7 +310,7 @@ def main():
                     # If we have no price at all (market order but no live price), reject.
                     if execution_price is None:
                         response_data = _error("NO_PRICE_AVAILABLE", f"No live price available for {symbol}")
-                        socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
+                        socket.send_multipart([identity, json.dumps(_with_correlation(response_data, payload)).encode('utf-8')])
                         continue
                         
                     if action_type == "buy":
@@ -331,7 +345,7 @@ def main():
                     else:
                         response_data = _error("INVALID_ACTION", f"Unknown action: {action_type}")
                             
-                    socket.send_multipart([identity, json.dumps(response_data).encode('utf-8')])
+                    socket.send_multipart([identity, json.dumps(_with_correlation(response_data, payload)).encode('utf-8')])
                     
             except zmq.ZMQError as e:
                 logger.error(f"ZMQ Error in main loop: {e}")
