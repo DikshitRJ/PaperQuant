@@ -15,4 +15,3 @@ VERSION = "0.2.0"
 
 for _path in (TEMP_DIR, ALGORITHMS_DIR, CONFIG_DIR):
     _path.mkdir(parents=True, exist_ok=True)
-

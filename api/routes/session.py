@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+
 from ..schemas import SessionStartRequest
 
 router = APIRouter(prefix="/session")
@@ -13,8 +14,11 @@ def error(code: str, message: str, status: int):
 async def start(request: Request, payload: SessionStartRequest):
     manager = request.app.state.session_manager
     try:
-        session = await manager.start_session([item.model_dump() for item in payload.watchlist],
-                                               payload.strategy_id, payload.settings)
+        session = await manager.start_session(
+            [item.model_dump() for item in payload.watchlist],
+            payload.strategy_id,
+            payload.settings,
+        )
     except RuntimeError as exc:
         code = str(exc)
         if code == "algorithm_not_found":

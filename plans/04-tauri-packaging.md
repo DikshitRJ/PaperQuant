@@ -363,44 +363,48 @@ from PyInstaller.utils.hooks import collect_all
 block_cipher = None
 
 # Collect all hidden imports for complex packages
-zmq_datas, zmq_binaries, zmq_hiddenimports = collect_all('zmq')
-yfinance_datas, yfinance_binaries, yfinance_hiddenimports = collect_all('yfinance')
+zmq_datas, zmq_binaries, zmq_hiddenimports = collect_all("zmq")
+yfinance_datas, yfinance_binaries, yfinance_hiddenimports = collect_all("yfinance")
 
 a = Analysis(
-    ['../api_server.py'],
-    pathex=['..'],
+    ["../api_server.py"],
+    pathex=[".."],
     binaries=zmq_binaries + yfinance_binaries,
     datas=[
-        ('../Indicators', 'Indicators'),           # Include indicators package
-        ('../Price_adapter', 'Price_adapter'),       # Include price adapter
-        ('../Trade_adapter.py', '.'),                # Include trade adapter
-        ('../Handler.py', '.'),                      # Include handler
-    ] + zmq_datas + yfinance_datas,
+        ("../Indicators", "Indicators"),  # Include indicators package
+        ("../Price_adapter", "Price_adapter"),  # Include price adapter
+        ("../Trade_adapter.py", "."),  # Include trade adapter
+        ("../Handler.py", "."),  # Include handler
+    ]
+    + zmq_datas
+    + yfinance_datas,
     hiddenimports=[
-        'diskcache',
-        'uvicorn',
-        'uvicorn.logging',
-        'uvicorn.loops',
-        'uvicorn.loops.auto',
-        'uvicorn.protocols',
-        'uvicorn.protocols.http',
-        'uvicorn.protocols.http.auto',
-        'uvicorn.protocols.websockets',
-        'uvicorn.protocols.websockets.auto',
-        'uvicorn.lifespan',
-        'uvicorn.lifespan.on',
-        'fastapi',
-        'starlette',
-        'pydantic',
-        'websockets',
-        'numpy',
-        'pandas',
-        'sqlite3',
-    ] + zmq_hiddenimports + yfinance_hiddenimports,
+        "diskcache",
+        "uvicorn",
+        "uvicorn.logging",
+        "uvicorn.loops",
+        "uvicorn.loops.auto",
+        "uvicorn.protocols",
+        "uvicorn.protocols.http",
+        "uvicorn.protocols.http.auto",
+        "uvicorn.protocols.websockets",
+        "uvicorn.protocols.websockets.auto",
+        "uvicorn.lifespan",
+        "uvicorn.lifespan.on",
+        "fastapi",
+        "starlette",
+        "pydantic",
+        "websockets",
+        "numpy",
+        "pandas",
+        "sqlite3",
+    ]
+    + zmq_hiddenimports
+    + yfinance_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['jupyter', 'notebook', 'ipython', 'tkinter', 'matplotlib'],
+    excludes=["jupyter", "notebook", "ipython", "tkinter", "matplotlib"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -416,14 +420,14 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='paperquant-server',
+    name="paperquant-server",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,           # Disable UPX to avoid ZMQ issues
+    upx=False,  # Disable UPX to avoid ZMQ issues
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,         # Console mode for stdout port discovery
+    console=True,  # Console mode for stdout port discovery
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -444,56 +448,64 @@ import platform
 import subprocess
 import shutil
 
+
 def get_target_triple():
     """Determine the Tauri-compatible target triple for the current platform."""
     machine = platform.machine().lower()
     system = platform.system().lower()
-    
+
     arch_map = {
-        'x86_64': 'x86_64',
-        'amd64': 'x86_64',
-        'aarch64': 'aarch64',
-        'arm64': 'aarch64',
+        "x86_64": "x86_64",
+        "amd64": "x86_64",
+        "aarch64": "aarch64",
+        "arm64": "aarch64",
     }
     arch = arch_map.get(machine, machine)
-    
-    if system == 'linux':
-        return f'{arch}-unknown-linux-gnu'
-    elif system == 'darwin':
-        return f'{arch}-apple-darwin'
-    elif system == 'windows':
-        return f'{arch}-pc-windows-msvc'
+
+    if system == "linux":
+        return f"{arch}-unknown-linux-gnu"
+    elif system == "darwin":
+        return f"{arch}-apple-darwin"
+    elif system == "windows":
+        return f"{arch}-pc-windows-msvc"
     else:
-        raise RuntimeError(f'Unsupported platform: {system}')
+        raise RuntimeError(f"Unsupported platform: {system}")
+
 
 def main():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    scripts_dir = os.path.join(project_root, 'scripts')
-    binaries_dir = os.path.join(project_root, 'src-tauri', 'binaries')
-    
+    scripts_dir = os.path.join(project_root, "scripts")
+    binaries_dir = os.path.join(project_root, "src-tauri", "binaries")
+
     os.makedirs(binaries_dir, exist_ok=True)
-    
+
     target_triple = get_target_triple()
     print(f"Building for target: {target_triple}")
-    
+
     # Run PyInstaller
-    subprocess.run([
-        sys.executable, '-m', 'PyInstaller',
-        '--clean',
-        '--noconfirm',
-        os.path.join(scripts_dir, 'paperquant.spec'),
-    ], cwd=project_root, check=True)
-    
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--clean",
+            "--noconfirm",
+            os.path.join(scripts_dir, "paperquant.spec"),
+        ],
+        cwd=project_root,
+        check=True,
+    )
+
     # Move binary to Tauri binaries directory with target triple suffix
-    dist_dir = os.path.join(project_root, 'dist')
-    
-    if platform.system() == 'Windows':
-        src = os.path.join(dist_dir, 'paperquant-server.exe')
-        dst = os.path.join(binaries_dir, f'paperquant-server-{target_triple}.exe')
+    dist_dir = os.path.join(project_root, "dist")
+
+    if platform.system() == "Windows":
+        src = os.path.join(dist_dir, "paperquant-server.exe")
+        dst = os.path.join(binaries_dir, f"paperquant-server-{target_triple}.exe")
     else:
-        src = os.path.join(dist_dir, 'paperquant-server')
-        dst = os.path.join(binaries_dir, f'paperquant-server-{target_triple}')
-    
+        src = os.path.join(dist_dir, "paperquant-server")
+        dst = os.path.join(binaries_dir, f"paperquant-server-{target_triple}")
+
     if os.path.exists(src):
         shutil.copy2(src, dst)
         os.chmod(dst, 0o755)
@@ -501,16 +513,17 @@ def main():
     else:
         print(f"ERROR: Expected binary not found at {src}")
         sys.exit(1)
-    
+
     # Clean up PyInstaller artifacts
-    for d in ['build', 'dist']:
+    for d in ["build", "dist"]:
         path = os.path.join(project_root, d)
         if os.path.exists(path):
             shutil.rmtree(path)
-    
+
     print("Sidecar build complete!")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
 ```
 
@@ -584,34 +597,47 @@ The Python backend needs consistent data paths that work across all platforms:
 import os
 import platform
 
+
 def get_data_dir() -> str:
     """Get the platform-specific data directory for PaperQuant."""
     system = platform.system()
-    
-    if system == 'Windows':
-        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
-        return os.path.join(base, 'PaperQuant')
-    elif system == 'Darwin':
-        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'PaperQuant')
+
+    if system == "Windows":
+        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        return os.path.join(base, "PaperQuant")
+    elif system == "Darwin":
+        return os.path.join(
+            os.path.expanduser("~"), "Library", "Application Support", "PaperQuant"
+        )
     else:
-        return os.path.join(os.environ.get('XDG_DATA_HOME', os.path.expanduser('~/.local/share')), 'PaperQuant')
+        return os.path.join(
+            os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+            "PaperQuant",
+        )
+
 
 def get_config_dir() -> str:
     """Get the platform-specific config directory."""
     system = platform.system()
-    
-    if system == 'Windows':
-        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
-        return os.path.join(base, 'PaperQuant', 'config')
-    elif system == 'Darwin':
-        return os.path.join(os.path.expanduser('~'), 'Library', 'Preferences', 'PaperQuant')
+
+    if system == "Windows":
+        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        return os.path.join(base, "PaperQuant", "config")
+    elif system == "Darwin":
+        return os.path.join(
+            os.path.expanduser("~"), "Library", "Preferences", "PaperQuant"
+        )
     else:
-        return os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'PaperQuant')
+        return os.path.join(
+            os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
+            "PaperQuant",
+        )
+
 
 # For bundled (PyInstaller) context:
 def get_base_dir() -> str:
     """Get the base directory for the application."""
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         # Running as PyInstaller bundle
         return os.path.dirname(sys.executable)
     else:

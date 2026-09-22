@@ -5,9 +5,15 @@ from pathlib import Path
 from threading import Lock
 
 DEFAULT_SETTINGS = {
-    "currency": "USD", "theme": "dark", "simulated_latency_ms": 0,
-    "commission_percent": 0.0, "leverage": 1, "auto_clear_logs": True,
-    "system_alerts": True, "sound_effects": False, "terminal_font_size": 14,
+    "currency": "USD",
+    "theme": "dark",
+    "simulated_latency_ms": 0,
+    "commission_percent": 0.0,
+    "leverage": 1,
+    "auto_clear_logs": True,
+    "system_alerts": True,
+    "sound_effects": False,
+    "terminal_font_size": 14,
 }
 
 
@@ -31,7 +37,12 @@ class SettingsStore:
 
     def update(self, updates: dict) -> dict:
         with self._lock:
-            self._settings.update({k: v for k, v in updates.items() if k in DEFAULT_SETTINGS and v is not None})
+            self._settings.update(
+                {
+                    k: v
+                    for k, v in updates.items()
+                    if k in DEFAULT_SETTINGS and v is not None
+                }
+            )
             self.path.write_text(json.dumps(self._settings, indent=2))
             return dict(self._settings)
-

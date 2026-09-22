@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
 from fastapi import APIRouter, Request
 
 try:
@@ -15,7 +16,9 @@ router = APIRouter(prefix="/market")
 async def prices(request: Request):
     if Cache is None:
         return {"prices": {}}
-    cache = Cache(str(request.app.state.session_manager.portfolio.prices_cache.directory))
+    cache = Cache(
+        str(request.app.state.session_manager.portfolio.prices_cache.directory)
+    )
     try:
         result = {}
         for key in cache.iterkeys():

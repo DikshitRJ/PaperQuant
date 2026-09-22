@@ -3,7 +3,6 @@ import json
 
 import pytest
 
-
 websocket_module = pytest.importorskip("api.websocket")
 
 

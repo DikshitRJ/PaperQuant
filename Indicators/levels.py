@@ -1,8 +1,10 @@
-from .Candle_fetcher import candle_list
 import pandas as pd
+
+from .Candle_fetcher import candle_list
 
 # Support and resistance indicators calculate key price levels.
 # Examples include Pivot Points, Fibonacci Retracements, Rolling High/Low, etc.
+
 
 def pivot_points(symbol, period, interval):
     """
@@ -15,15 +17,16 @@ def pivot_points(symbol, period, interval):
     candles = candle_list(symbol, period, interval, field="all")
     if not candles:
         return None
-        
+
     high = candles[-1]["high"]
     low = candles[-1]["low"]
     close = candles[-1]["close"]
-    
+
     pivot = (high + low + close) / 3
     support1 = (2 * pivot) - high
     resistance1 = (2 * pivot) - low
     return {"pivot": pivot, "support1": support1, "resistance1": resistance1}
+
 
 def rolling_high_low(symbol, period, interval):
     """
@@ -36,11 +39,12 @@ def rolling_high_low(symbol, period, interval):
     candles = candle_list(symbol, period, interval, field="all")
     if not candles:
         return None
-        
+
     prices = [c["close"] for c in candles]
     rolling_high = pd.Series(prices).rolling(window=period).max()
     rolling_low = pd.Series(prices).rolling(window=period).min()
     return {"high": rolling_high.iloc[-1], "low": rolling_low.iloc[-1]}
+
 
 def fib_retracement(symbol, period, interval, level):
     """
@@ -54,12 +58,13 @@ def fib_retracement(symbol, period, interval, level):
     candles = candle_list(symbol, period, interval, field="all")
     if not candles:
         return None
-        
+
     high = max(c["high"] for c in candles)
     low = min(c["low"] for c in candles)
     diff = high - low
-    
+
     return high - (level * diff)
+
 
 def fib_extension(symbol, period, interval, level):
     """
@@ -73,9 +78,9 @@ def fib_extension(symbol, period, interval, level):
     candles = candle_list(symbol, period, interval, field="all")
     if not candles:
         return None
-        
+
     high = max(c["high"] for c in candles)
     low = min(c["low"] for c in candles)
     diff = high - low
-    
+
     return high + ((level - 1.0) * diff)

@@ -1,6 +1,5 @@
 import pytest
 
-
 schemas = pytest.importorskip("api.schemas")
 
 
@@ -20,7 +19,9 @@ def test_position_schema_matches_frontend_contract():
 
     assert position.ticker == "AAPL"
     assert position.qty == 10
-    dumped = position.model_dump() if hasattr(position, "model_dump") else position.dict()
+    dumped = (
+        position.model_dump() if hasattr(position, "model_dump") else position.dict()
+    )
     assert dumped["pnl_percent"] == "+0.92%"
 
 

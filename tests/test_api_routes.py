@@ -1,6 +1,5 @@
 import pytest
 
-
 app_module = pytest.importorskip("api.app")
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
@@ -8,7 +7,14 @@ from fastapi.testclient import TestClient
 
 def test_app_exposes_documented_http_routes():
     app = app_module.create_app()
-    paths = {route.path for route in app.routes}
+    paths = set()
+    for route in app.routes:
+        if hasattr(route, "path"):
+            paths.add(route.path)
+        elif route.__class__.__name__ == "_IncludedRouter":
+            prefix = getattr(route.include_context, "prefix", "")
+            for r in getattr(route.original_router, "routes", []):
+                paths.add(prefix + getattr(r, "path", ""))
 
     expected = {
         "/api/health",
@@ -36,4 +42,4 @@ def test_health_route_returns_contract_shape():
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert {"version", "uptime_seconds", "adapters"} <= body
+    assert {"version", "uptime_seconds", "adapters"} <= body.keys()

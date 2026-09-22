@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime, timezone
+
 from diskcache import Cache
-import json
 
 
 def _normalize_timestamp(ts):
@@ -16,11 +16,7 @@ def _normalize_timestamp(ts):
     return ts.replace(second=0, microsecond=0)
 
 
-def imt_sqlite(
-    data,
-    db_path="./Temporary/paperquant.db",
-    table_name="candles"
-):
+def imt_sqlite(data, db_path="./Temporary/paperquant.db", table_name="candles"):
     conn = None
     try:
         conn = sqlite3.connect(db_path)
@@ -55,15 +51,17 @@ def imt_sqlite(
                 continue
 
             seen.add(key)
-            rows.append((
-                d["symbol"],
-                d["open"],
-                d["high"],
-                d["low"],
-                d["close"],
-                d["volume"],
-                ts
-            ))
+            rows.append(
+                (
+                    d["symbol"],
+                    d["open"],
+                    d["high"],
+                    d["low"],
+                    d["close"],
+                    d["volume"],
+                    ts,
+                )
+            )
 
         if not rows:
             return 0
@@ -76,7 +74,7 @@ def imt_sqlite(
             (symbol, open, high, low, close, volume, timestamp)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            rows
+            rows,
         )
 
         conn.commit()

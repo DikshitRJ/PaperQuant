@@ -2,7 +2,6 @@ import asyncio
 
 import pytest
 
-
 session_module = pytest.importorskip("api.services.session_manager")
 
 
@@ -38,8 +37,20 @@ class FakePortfolio:
 
     def get_aggregate_stats(self, start_time, active_algos=0):
         return {
-            "session": {"pnl": "+$0.00", "invested": "$0.00", "current": "$0.00", "uptime": "00:00:00", "trend": "none"},
-            "global": {"total_pnl": "+$0.00", "pnl_percent": "+0.00%", "active_algos": str(active_algos), "algo_runtime": "0h 0m", "pnl_trend": "none"},
+            "session": {
+                "pnl": "+$0.00",
+                "invested": "$0.00",
+                "current": "$0.00",
+                "uptime": "00:00:00",
+                "trend": "none",
+            },
+            "global": {
+                "total_pnl": "+$0.00",
+                "pnl_percent": "+0.00%",
+                "active_algos": str(active_algos),
+                "algo_runtime": "0h 0m",
+                "pnl_trend": "none",
+            },
         }
 
 
@@ -61,11 +72,19 @@ class FakeStatsTracker:
         return None
 
 
-def test_session_manager_rejects_second_start_without_spawning_more_processes(monkeypatch, tmp_path):
+def test_session_manager_rejects_second_start_without_spawning_more_processes(
+    monkeypatch, tmp_path
+):
     monkeypatch.setattr(session_module, "ProcessManager", FakeProcessManager)
-    monkeypatch.setattr(session_module, "PortfolioService", lambda *args: FakePortfolio())
-    monkeypatch.setattr(session_module, "AlgorithmStore", lambda *args: FakeAlgorithmStore())
-    monkeypatch.setattr(session_module, "SettingsStore", lambda *args: FakeSettingsStore())
+    monkeypatch.setattr(
+        session_module, "PortfolioService", lambda *args: FakePortfolio()
+    )
+    monkeypatch.setattr(
+        session_module, "AlgorithmStore", lambda *args: FakeAlgorithmStore()
+    )
+    monkeypatch.setattr(
+        session_module, "SettingsStore", lambda *args: FakeSettingsStore()
+    )
     monkeypatch.setattr(session_module, "StatsTracker", FakeStatsTracker)
     manager = session_module.SessionManager(base_dir=tmp_path)
 
@@ -84,9 +103,15 @@ def test_session_manager_rejects_second_start_without_spawning_more_processes(mo
 
 def test_stop_without_active_session_raises(monkeypatch):
     monkeypatch.setattr(session_module, "ProcessManager", FakeProcessManager)
-    monkeypatch.setattr(session_module, "PortfolioService", lambda *args: FakePortfolio())
-    monkeypatch.setattr(session_module, "AlgorithmStore", lambda *args: FakeAlgorithmStore())
-    monkeypatch.setattr(session_module, "SettingsStore", lambda *args: FakeSettingsStore())
+    monkeypatch.setattr(
+        session_module, "PortfolioService", lambda *args: FakePortfolio()
+    )
+    monkeypatch.setattr(
+        session_module, "AlgorithmStore", lambda *args: FakeAlgorithmStore()
+    )
+    monkeypatch.setattr(
+        session_module, "SettingsStore", lambda *args: FakeSettingsStore()
+    )
     monkeypatch.setattr(session_module, "StatsTracker", FakeStatsTracker)
     manager = session_module.SessionManager()
 

@@ -1,11 +1,11 @@
+import csv
+import json
+import logging
 import os
 import time
-import zmq
-import json
-import uuid
-import logging
-import csv
 from datetime import datetime, timezone
+
+import zmq
 from diskcache import Cache
 
 # -------------------------------------------------
@@ -14,8 +14,12 @@ from diskcache import Cache
 
 ZMQ_BIND_ENDPOINT = os.getenv("SIM_TRADE_BIND_ENDPOINT", "tcp://127.0.0.1:5555")
 STATE_CACHE_PATH = os.getenv("SIM_STATE_CACHE_PATH", "./Temporary/state")
-LIVEPRICES_CACHE_PATH = os.getenv("SIM_LIVEPRICES_CACHE_PATH", "./Temporary/cache_liveprices")
-ORDER_HISTORY_FILE = os.getenv("SIM_ORDER_HISTORY_FILE", "./Temporary/order_history.csv")
+LIVEPRICES_CACHE_PATH = os.getenv(
+    "SIM_LIVEPRICES_CACHE_PATH", "./Temporary/cache_liveprices"
+)
+ORDER_HISTORY_FILE = os.getenv(
+    "SIM_ORDER_HISTORY_FILE", "./Temporary/order_history.csv"
+)
 
 # -------------------------------------------------
 # Logging
@@ -24,32 +28,25 @@ ORDER_HISTORY_FILE = os.getenv("SIM_ORDER_HISTORY_FILE", "./Temporary/order_hist
 logger = logging.getLogger("trade_adapter")
 if not logger.handlers:
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
 
 # -------------------------------------------------
 # Helpers
 # -------------------------------------------------
 
+
 def _ok(data):
-    return {
-        "status": "ok",
-        "data": data
-    }
+    return {"status": "ok", "data": data}
+
 
 def _pending(data):
-    return {
-        "status": "pending",
-        "data": data
-    }
+    return {"status": "pending", "data": data}
+
 
 def _error(code, message=None):
-    return {
-        "status": "error",
-        "code": code,
-        "message": message
-    }
+    return {"status": "error", "code": code, "message": message}
+
 
 def _with_correlation(response, payload):
     correlation_id = payload.get("correlation_id")
@@ -57,8 +54,25 @@ def _with_correlation(response, payload):
         response["correlation_id"] = correlation_id
     return response
 
+
 def _now_s():
     return time.time()
+
+
+def get_settings():
+    settings_file = os.path.expanduser("~/.paperquant/settings.json")
+    try:
+        if os.path.isfile(settings_file):
+            with open(settings_file, "r") as f:
+                settings = json.load(f)
+                return {
+                    "simulated_latency_ms": settings.get("simulated_latency_ms", 0),
+                    "commission_percent": settings.get("commission_percent", 0.0),
+                }
+    except Exception as e:
+        logger.error(f"Failed to read settings: {e}")
+    return {"simulated_latency_ms": 0, "commission_percent": 0.0}
+
 
 def get_delayed_price(cache, symbol, delay_seconds=60):
     """
@@ -67,12 +81,12 @@ def get_delayed_price(cache, symbol, delay_seconds=60):
     """
     cache_key = f"prices:{symbol}"
     price_data = cache.get(cache_key, [])
-    
+
     if not isinstance(price_data, list) or not price_data:
         return None
-        
+
     target_ts = _now_s() - delay_seconds
-    
+
     # price_data is sorted by 'ts' (appended in order)
     # Find the one just before target_ts
     selected_price = None
@@ -83,56 +97,73 @@ def get_delayed_price(cache, symbol, delay_seconds=60):
             selected_price = item["price"]
         else:
             break
-            
+
     # Fallback: if all are newer than target_ts, return the oldest available
     if selected_price is None and price_data:
         selected_price = price_data[0]["price"]
-        
+
     return selected_price
+
 
 def log_trade(strategy_id, symbol, action, quantity, price):
     file_exists = os.path.isfile(ORDER_HISTORY_FILE)
     try:
-        with open(ORDER_HISTORY_FILE, 'a', newline='') as csvfile:
+        with open(ORDER_HISTORY_FILE, "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
             if not file_exists:
-                writer.writerow(['Timestamp', 'Strategy_ID', 'Symbol', 'Action', 'Executed_Quantity', 'Executed_Price'])
-            
-            timestamp_str = datetime.fromtimestamp(_now_s(), tz=timezone.utc).isoformat()
-            writer.writerow([timestamp_str, strategy_id, symbol, action, quantity, price])
+                writer.writerow(
+                    [
+                        "Timestamp",
+                        "Strategy_ID",
+                        "Symbol",
+                        "Action",
+                        "Executed_Quantity",
+                        "Executed_Price",
+                    ]
+                )
+
+            timestamp_str = datetime.fromtimestamp(
+                _now_s(), tz=timezone.utc
+            ).isoformat()
+            writer.writerow(
+                [timestamp_str, strategy_id, symbol, action, quantity, price]
+            )
     except Exception as e:
         logger.error(f"Failed to write to order history: {e}")
 
-def update_position(state_cache, strategy_id, symbol, action_type, quantity, execution_price):
+
+def update_position(
+    state_cache, strategy_id, symbol, action_type, quantity, execution_price
+):
     """
     Updates the position and avg_price inside diskcache.
     Supports short selling and properly weights average cost bases.
     """
     state_key = f"{strategy_id}:{symbol}"
-    
+
     current_state = state_cache.get(state_key, {"qty": 0, "avg_price": 0.0})
-    
+
     # Handle older version of diskcache that might just store integers
     if isinstance(current_state, int):
         current_state = {"qty": current_state, "avg_price": 0.0}
-        
+
     current_qty = current_state.get("qty", 0)
     current_avg = current_state.get("avg_price", 0.0)
-    
+
     is_increasing_position = False
     is_flipping_position = False
-    
+
     if action_type == "buy":
         new_qty = current_qty + quantity
-        
+
         if current_qty >= 0:
             is_increasing_position = True
         elif new_qty > 0:
             is_flipping_position = True
-            
+
     elif action_type == "sell":
         new_qty = current_qty - quantity
-        
+
         if current_qty <= 0:
             # -2 - 1 = -3 (increasing short)
             is_increasing_position = True
@@ -148,43 +179,45 @@ def update_position(state_cache, strategy_id, symbol, action_type, quantity, exe
     elif is_flipping_position:
         # Starting fresh in the other direction
         new_avg = execution_price
-        
+
     # If position reduces to exactly 0, preserve 0.0 avg
     if new_qty == 0:
         new_avg = 0.0
-        
+
     new_state = {"qty": new_qty, "avg_price": new_avg}
     state_cache.set(state_key, new_state)
-    
+
     return new_qty, new_avg
+
 
 # -------------------------------------------------
 # Main Loop Setup
 # -------------------------------------------------
 
+
 def main():
     logger.info("Initializing Advanced Trade Adapter...")
-    
+
     # Ensure Temp directory exists
     os.makedirs("./Temporary", exist_ok=True)
-    
+
     # Initialize Diskcache
     logger.info(f"Connecting to State Cache: {STATE_CACHE_PATH}")
     state_cache = Cache(STATE_CACHE_PATH, timeout=30)
-    
+
     logger.info(f"Connecting to Live Prices Cache: {LIVEPRICES_CACHE_PATH}")
     liveprices_cache = Cache(LIVEPRICES_CACHE_PATH, timeout=30)
-    
+
     # Initialize ZeroMQ
     context = zmq.Context.instance()
     socket = context.socket(zmq.ROUTER)
-    
+
     logger.info(f"Binding ROUTER socket to {ZMQ_BIND_ENDPOINT}")
     socket.bind(ZMQ_BIND_ENDPOINT)
-    
+
     poller = zmq.Poller()
     poller.register(socket, zmq.POLLIN)
-    
+
     pending_orders = state_cache.get("pending_orders", [])
     if not isinstance(pending_orders, list):
         pending_orders = []
@@ -192,10 +225,10 @@ def main():
 
     def persist_pending_orders():
         state_cache.set("pending_orders", pending_orders, expire=None)
-    
+
     logger.info(f"Writing history to: {ORDER_HISTORY_FILE}")
     logger.info("Trade Adapter is running and listening for orders.")
-    
+
     try:
         while True:
             try:
@@ -209,69 +242,124 @@ def main():
                     action_type = order["action"]
                     quantity = order["quantity"]
                     requested_price = order["price"]
-                    
+
                     live_price = get_delayed_price(liveprices_cache, symbol)
-                    
+
                     executed = False
                     if live_price is not None:
-                        if action_type == "buy" and live_price <= requested_price:
-                            new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "buy", quantity, live_price)
-                            logger.info(f"PENDING BUY EXECUTION: {strategy_id} bought {quantity} {symbol} @ {live_price}. (Limit: {requested_price}) New Pos: {new_qty} (Avg: {new_avg:.2f})")
-                            log_trade(strategy_id, symbol, "buy", quantity, live_price)
-                            response_data = _ok({
-                                "symbol": symbol,
-                                "action": "buy",
-                                "executed_quantity": quantity,
-                                "executed_price": live_price,
-                                "current_position": new_qty,
-                                "current_avg_price": new_avg,
-                                "ts": _now_s()
-                            })
-                            socket.send_multipart([identity, json.dumps(_with_correlation(response_data, order)).encode('utf-8')])
+                        can_execute = False
+                        if (
+                            action_type == "buy"
+                            and live_price <= requested_price
+                            or action_type == "sell"
+                            and live_price >= requested_price
+                        ):
+                            can_execute = True
+
+                        if can_execute:
+                            settings = get_settings()
+                            if settings["simulated_latency_ms"] > 0:
+                                time.sleep(settings["simulated_latency_ms"] / 1000.0)
+
+                            capital_key = f"capital:{symbol}"
+                            available_capital = state_cache.get(capital_key)
+                            if available_capital is None:
+                                available_capital = float("inf")
+
+                            trade_value = quantity * live_price
+                            commission = trade_value * (
+                                settings["commission_percent"] / 100.0
+                            )
+
+                            if action_type == "buy":
+                                total_cost = trade_value + commission
+                                if available_capital < total_cost:
+                                    logger.warning(
+                                        f"PENDING BUY FAILED: {strategy_id} insufficient capital for {symbol}"
+                                    )
+                                    can_execute = False
+                                else:
+                                    if available_capital != float("inf"):
+                                        state_cache.set(
+                                            capital_key, available_capital - total_cost
+                                        )
+                            elif action_type == "sell":
+                                net_revenue = trade_value - commission
+                                if available_capital != float("inf"):
+                                    state_cache.set(
+                                        capital_key, available_capital + net_revenue
+                                    )
+
+                        if can_execute:
+                            new_qty, new_avg = update_position(
+                                state_cache,
+                                strategy_id,
+                                symbol,
+                                action_type,
+                                quantity,
+                                live_price,
+                            )
+                            logger.info(
+                                f"PENDING {action_type.upper()} EXECUTION: {strategy_id} {action_type} {quantity} {symbol} @ {live_price}. (Limit: {requested_price}) New Pos: {new_qty} (Avg: {new_avg:.2f})"
+                            )
+                            log_trade(
+                                strategy_id, symbol, action_type, quantity, live_price
+                            )
+                            response_data = _ok(
+                                {
+                                    "symbol": symbol,
+                                    "action": action_type,
+                                    "executed_quantity": quantity,
+                                    "executed_price": live_price,
+                                    "current_position": new_qty,
+                                    "current_avg_price": new_avg,
+                                    "ts": _now_s(),
+                                }
+                            )
+                            socket.send_multipart(
+                                [
+                                    identity,
+                                    json.dumps(
+                                        _with_correlation(response_data, order)
+                                    ).encode("utf-8"),
+                                ]
+                            )
                             executed = True
-                        elif action_type == "sell" and live_price >= requested_price:
-                            new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "sell", quantity, live_price)
-                            logger.info(f"PENDING SELL EXECUTION: {strategy_id} sold {quantity} {symbol} @ {live_price}. (Limit: {requested_price}) New Pos: {new_qty} (Avg: {new_avg:.2f})")
-                            log_trade(strategy_id, symbol, "sell", quantity, live_price)
-                            response_data = _ok({
-                                "symbol": symbol,
-                                "action": "sell",
-                                "executed_quantity": quantity,
-                                "executed_price": live_price,
-                                "current_position": new_qty,
-                                "current_avg_price": new_avg,
-                                "ts": _now_s()
-                            })
-                            socket.send_multipart([identity, json.dumps(_with_correlation(response_data, order)).encode('utf-8')])
-                            executed = True
-                            
+
                     if not executed:
                         still_pending.append(pending_item)
-                
+
                 pending_orders = still_pending
                 persist_pending_orders()
-                
+
                 # 2. Poll for new messages (100ms timeout)
                 events = dict(poller.poll(100))
                 if socket in events:
                     # Receive multipart message: [identity, payload]
                     message_parts = socket.recv_multipart()
-                    
+
                     if len(message_parts) < 2:
                         continue
-                        
+
                     identity = message_parts[0]
                     payload_bytes = message_parts[-1]
-                    
+
                     try:
-                        payload = json.loads(payload_bytes.decode('utf-8'))
+                        payload = json.loads(payload_bytes.decode("utf-8"))
                     except json.JSONDecodeError:
-                        socket.send_multipart([identity, json.dumps(_error("INVALID_JSON", "Payload must be JSON")).encode('utf-8')])
+                        socket.send_multipart(
+                            [
+                                identity,
+                                json.dumps(
+                                    _error("INVALID_JSON", "Payload must be JSON")
+                                ).encode("utf-8"),
+                            ]
+                        )
                         continue
 
                     # Extract fields
                     action_type = payload.get("action")
-                    
+
                     # ---------------------------------------------------------
                     # Buy/Sell Logic
                     # ---------------------------------------------------------
@@ -279,77 +367,156 @@ def main():
                     symbol = payload.get("symbol")
                     quantity = payload.get("quantity")
                     requested_price = payload.get("price")
-                    
+
                     if not strategy_id or not symbol or not action_type or not quantity:
-                        socket.send_multipart([identity, json.dumps(_error("MISSING_FIELDS", "Must provide strategy_id, symbol, action, quantity")).encode('utf-8')])
+                        socket.send_multipart(
+                            [
+                                identity,
+                                json.dumps(
+                                    _error(
+                                        "MISSING_FIELDS",
+                                        "Must provide strategy_id, symbol, action, quantity",
+                                    )
+                                ).encode("utf-8"),
+                            ]
+                        )
                         continue
-                        
+
                     # Fetch immediate live price
                     live_price = get_delayed_price(liveprices_cache, symbol)
-                    
+
                     response_data = None
-                    
+
                     if requested_price is not None:
                         # Limit order logic
                         can_execute_immediately = False
                         if live_price is not None:
-                            if action_type == "buy" and live_price <= requested_price:
+                            if (
+                                action_type == "buy"
+                                and live_price <= requested_price
+                                or action_type == "sell"
+                                and live_price >= requested_price
+                            ):
                                 can_execute_immediately = True
-                            elif action_type == "sell" and live_price >= requested_price:
-                                can_execute_immediately = True
-                                
+
                         if not can_execute_immediately:
                             # Queue order
-                            pending_orders.append({"identity": identity, "payload": payload})
+                            pending_orders.append(
+                                {"identity": identity, "payload": payload}
+                            )
                             persist_pending_orders()
-                            logger.info(f"ORDER QUEUED: {action_type} {quantity} {symbol} @ limit {requested_price} for {strategy_id}")
+                            logger.info(
+                                f"ORDER QUEUED: {action_type} {quantity} {symbol} @ limit {requested_price} for {strategy_id}"
+                            )
                             continue
-                    
+
                     # Execute immediately
-                    execution_price = live_price if requested_price is None else requested_price
+                    execution_price = (
+                        live_price if requested_price is None else requested_price
+                    )
                     # If we have no price at all (market order but no live price), reject.
                     if execution_price is None:
-                        response_data = _error("NO_PRICE_AVAILABLE", f"No live price available for {symbol}")
-                        socket.send_multipart([identity, json.dumps(_with_correlation(response_data, payload)).encode('utf-8')])
+                        response_data = _error(
+                            "NO_PRICE_AVAILABLE",
+                            f"No live price available for {symbol}",
+                        )
+                        socket.send_multipart(
+                            [
+                                identity,
+                                json.dumps(
+                                    _with_correlation(response_data, payload)
+                                ).encode("utf-8"),
+                            ]
+                        )
                         continue
-                        
-                    if action_type == "buy":
-                        new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "buy", quantity, execution_price)
-                        logger.info(f"IMMEDIATE BUY EXECUTION: {strategy_id} bought {quantity} {symbol} @ {execution_price}. New Pos: {new_qty} (Avg: {new_avg:.2f})")
-                        log_trade(strategy_id, symbol, "buy", quantity, execution_price)
-                        
-                        response_data = _ok({
-                            "symbol": symbol,
-                            "action": "buy",
-                            "executed_quantity": quantity,
-                            "executed_price": execution_price,
-                            "current_position": new_qty,
-                            "current_avg_price": new_avg,
-                            "ts": _now_s()
-                        })
-                        
-                    elif action_type == "sell":
-                        new_qty, new_avg = update_position(state_cache, strategy_id, symbol, "sell", quantity, execution_price)
-                        logger.info(f"IMMEDIATE SELL EXECUTION: {strategy_id} sold {quantity} {symbol} @ {execution_price}. New Pos: {new_qty} (Avg: {new_avg:.2f})")
-                        log_trade(strategy_id, symbol, "sell", quantity, execution_price)
-                        
-                        response_data = _ok({
-                            "symbol": symbol,
-                            "action": "sell",
-                            "executed_quantity": quantity,
-                            "executed_price": execution_price,
-                            "current_position": new_qty,
-                            "current_avg_price": new_avg,
-                            "ts": _now_s()
-                        })
+
+                    if action_type in ("buy", "sell"):
+                        settings = get_settings()
+                        if settings["simulated_latency_ms"] > 0:
+                            time.sleep(settings["simulated_latency_ms"] / 1000.0)
+
+                        capital_key = f"capital:{symbol}"
+                        available_capital = state_cache.get(capital_key)
+                        if available_capital is None:
+                            available_capital = float("inf")
+
+                        trade_value = quantity * execution_price
+                        commission = trade_value * (
+                            settings["commission_percent"] / 100.0
+                        )
+
+                        can_execute = True
+                        if action_type == "buy":
+                            total_cost = trade_value + commission
+                            if available_capital < total_cost:
+                                logger.warning(
+                                    f"IMMEDIATE BUY FAILED: {strategy_id} insufficient capital for {symbol}"
+                                )
+                                response_data = _error(
+                                    "INSUFFICIENT_CAPITAL",
+                                    f"Insufficient capital to buy {quantity} {symbol}",
+                                )
+                                can_execute = False
+                            else:
+                                if available_capital != float("inf"):
+                                    state_cache.set(
+                                        capital_key, available_capital - total_cost
+                                    )
+                        elif action_type == "sell":
+                            net_revenue = trade_value - commission
+                            if available_capital != float("inf"):
+                                state_cache.set(
+                                    capital_key, available_capital + net_revenue
+                                )
+
+                        if can_execute:
+                            new_qty, new_avg = update_position(
+                                state_cache,
+                                strategy_id,
+                                symbol,
+                                action_type,
+                                quantity,
+                                execution_price,
+                            )
+                            logger.info(
+                                f"IMMEDIATE {action_type.upper()} EXECUTION: {strategy_id} {action_type} {quantity} {symbol} @ {execution_price}. New Pos: {new_qty} (Avg: {new_avg:.2f})"
+                            )
+                            log_trade(
+                                strategy_id,
+                                symbol,
+                                action_type,
+                                quantity,
+                                execution_price,
+                            )
+
+                            response_data = _ok(
+                                {
+                                    "symbol": symbol,
+                                    "action": action_type,
+                                    "executed_quantity": quantity,
+                                    "executed_price": execution_price,
+                                    "current_position": new_qty,
+                                    "current_avg_price": new_avg,
+                                    "ts": _now_s(),
+                                }
+                            )
                     else:
-                        response_data = _error("INVALID_ACTION", f"Unknown action: {action_type}")
-                            
-                    socket.send_multipart([identity, json.dumps(_with_correlation(response_data, payload)).encode('utf-8')])
-                    
+                        response_data = _error(
+                            "INVALID_ACTION", f"Unknown action: {action_type}"
+                        )
+
+                    socket.send_multipart(
+                        [
+                            identity,
+                            json.dumps(
+                                _with_correlation(response_data, payload)
+                            ).encode("utf-8"),
+                        ]
+                    )
+
             except zmq.ZMQError as e:
                 logger.error(f"ZMQ Error in main loop: {e}")
-                
+
     except KeyboardInterrupt:
         logger.info("Trade Adapter shutting down...")
     finally:
@@ -357,6 +524,7 @@ def main():
         context.term()
         state_cache.close()
         liveprices_cache.close()
+
 
 if __name__ == "__main__":
     main()

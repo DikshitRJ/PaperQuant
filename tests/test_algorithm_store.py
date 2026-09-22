@@ -1,6 +1,5 @@
 import pytest
 
-
 store_module = pytest.importorskip("api.services.algorithm_store")
 
 

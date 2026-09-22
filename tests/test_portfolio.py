@@ -1,6 +1,5 @@
 import pytest
 
-
 portfolio_module = pytest.importorskip("api.services.portfolio")
 
 

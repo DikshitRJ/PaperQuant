@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -100,4 +101,3 @@ class SettingsUpdate(BaseModel):
     system_alerts: bool | None = None
     sound_effects: bool | None = None
     terminal_font_size: int | None = Field(default=None, ge=8, le=32)
-

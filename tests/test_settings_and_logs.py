@@ -1,6 +1,5 @@
 import pytest
 
-
 settings_module = pytest.importorskip("api.services.settings_store")
 logs_module = pytest.importorskip("api.services.log_buffer")
 

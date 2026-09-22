@@ -21,7 +21,10 @@ class LogBuffer:
     def add(self, source: str, message: str) -> dict:
         message = message.strip()
         color = self.SOURCE_COLORS.get(source, "text-gray-400")
-        if any(word in message.lower() for word in ("error", "exception", "traceback", "failed")):
+        if any(
+            word in message.lower()
+            for word in ("error", "exception", "traceback", "failed")
+        ):
             color = self.SOURCE_COLORS["error"]
         entry = {
             "time": datetime.now(timezone.utc).strftime("%H:%M:%S"),
@@ -38,7 +41,10 @@ class LogBuffer:
             entries = list(self._buffer)
         if since:
             entries = [entry for entry in entries if entry["_timestamp"] > since]
-        return [{k: v for k, v in item.items() if k != "_timestamp"} for item in entries[-limit:]]
+        return [
+            {k: v for k, v in item.items() if k != "_timestamp"}
+            for item in entries[-limit:]
+        ]
 
     def get_all(self) -> list[dict]:
         with self._lock:

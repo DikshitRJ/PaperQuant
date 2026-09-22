@@ -4,6 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Any
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 ws_router = APIRouter()
@@ -25,7 +26,11 @@ class ConnectionManager:
                 self.active_connections.remove(websocket)
 
     async def broadcast(self, event_type: str, data: Any) -> None:
-        message = {"type": event_type, "data": data, "timestamp": datetime.now(timezone.utc).isoformat()}
+        message = {
+            "type": event_type,
+            "data": data,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
         encoded = json.dumps(message)
         async with self._lock:
             connections = list(self.active_connections)

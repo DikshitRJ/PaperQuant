@@ -18,7 +18,11 @@ class PortfolioService:
 
     def get_current_price(self, symbol: str) -> float | None:
         prices = self.prices_cache.get(f"prices:{symbol}", [])
-        return float(prices[-1]["price"]) if prices and isinstance(prices[-1], dict) else None
+        return (
+            float(prices[-1]["price"])
+            if prices and isinstance(prices[-1], dict)
+            else None
+        )
 
     def get_enriched_positions(self) -> list[dict[str, Any]]:
         positions = []
@@ -36,31 +40,56 @@ class PortfolioService:
             invested, value = abs(qty) * avg, abs(qty) * current
             pnl = (value - invested) * (1 if qty > 0 else -1)
             pct = pnl / invested * 100 if invested else 0
-            positions.append({
-                "ticker": symbol, "initials": symbol[:2].upper(), "qty": qty,
-                "avg_price": round(avg, 2), "current_price": round(current, 2),
-                "invested": f"${invested:,.2f}", "current": f"${value:,.2f}",
-                "pnl": f"{'+' if pnl >= 0 else '-'}${abs(pnl):,.2f}",
-                "pnl_percent": f"{'+' if pct >= 0 else '-'}{abs(pct):.2f}%",
-                "strategy_id": strategy_id,
-            })
+            positions.append(
+                {
+                    "ticker": symbol,
+                    "initials": symbol[:2].upper(),
+                    "qty": qty,
+                    "avg_price": round(avg, 2),
+                    "current_price": round(current, 2),
+                    "invested": f"${invested:,.2f}",
+                    "current": f"${value:,.2f}",
+                    "pnl": f"{'+' if pnl >= 0 else '-'}${abs(pnl):,.2f}",
+                    "pnl_percent": f"{'+' if pct >= 0 else '-'}{abs(pct):.2f}%",
+                    "strategy_id": strategy_id,
+                }
+            )
         return positions
 
-    def get_aggregate_stats(self, session_start_time: float | None, active_algos: int = 0) -> dict:
+    def get_aggregate_stats(
+        self, session_start_time: float | None, active_algos: int = 0
+    ) -> dict:
         import time
+
         positions = self.get_enriched_positions()
-        invested = sum(float(p["invested"].replace("$", "").replace(",", "")) for p in positions)
-        current = sum(float(p["current"].replace("$", "").replace(",", "")) for p in positions)
+        invested = sum(
+            float(p["invested"].replace("$", "").replace(",", "")) for p in positions
+        )
+        current = sum(
+            float(p["current"].replace("$", "").replace(",", "")) for p in positions
+        )
         pnl = current - invested
         pct = pnl / invested * 100 if invested else 0
-        elapsed = max(0, int(time.time() - session_start_time)) if session_start_time else 0
+        elapsed = (
+            max(0, int(time.time() - session_start_time)) if session_start_time else 0
+        )
         h, rem = divmod(elapsed, 3600)
         m, s = divmod(rem, 60)
         trend = "up" if pnl > 0 else "down" if pnl < 0 else "none"
         money = lambda n: f"{'+' if n >= 0 else '-'}${abs(n):,.2f}"
         return {
-            "session": {"pnl": money(pnl), "invested": f"${invested:,.2f}", "current": f"${current:,.2f}",
-                        "uptime": f"{h:02d}:{m:02d}:{s:02d}", "trend": trend},
-            "global": {"total_pnl": money(pnl), "pnl_percent": f"{'+' if pct >= 0 else '-'}{abs(pct):.2f}%",
-                       "active_algos": str(active_algos), "algo_runtime": f"{h}h {m}m", "pnl_trend": trend},
+            "session": {
+                "pnl": money(pnl),
+                "invested": f"${invested:,.2f}",
+                "current": f"${current:,.2f}",
+                "uptime": f"{h:02d}:{m:02d}:{s:02d}",
+                "trend": trend,
+            },
+            "global": {
+                "total_pnl": money(pnl),
+                "pnl_percent": f"{'+' if pct >= 0 else '-'}{abs(pct):.2f}%",
+                "active_algos": str(active_algos),
+                "algo_runtime": f"{h}h {m}m",
+                "pnl_trend": trend,
+            },
         }

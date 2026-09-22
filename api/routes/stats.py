@@ -8,7 +8,11 @@ async def stats(request: Request):
     manager = request.app.state.session_manager
     return manager.portfolio.get_aggregate_stats(
         manager.start_time,
-        sum(1 for name in manager.process_manager.processes if name.startswith("strategy_")),
+        sum(
+            1
+            for name in manager.process_manager.processes
+            if name.startswith("strategy_")
+        ),
     )
 
 
