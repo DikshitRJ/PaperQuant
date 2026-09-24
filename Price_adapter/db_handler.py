@@ -18,8 +18,10 @@ def _normalize_timestamp(ts):
 
 import os
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from api.config import TEMP_DIR, DATABASE_PATH
+from api.config import DATABASE_PATH, TEMP_DIR
+
 
 def imt_sqlite(data, db_path=str(DATABASE_PATH), table_name="candles"):
     conn = None

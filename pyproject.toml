@@ -26,3 +26,9 @@ package-mode = false
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+ignore = ["BLE001", "LOG015", "B008", "RUF012", "ASYNC230", "DTZ005", "PIE790", "SIM102", "N999"]

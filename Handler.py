@@ -21,6 +21,7 @@ sys.path.insert(0, INDICATORS_DIR)
 
 ZMQ_ENDPOINT = os.getenv("SIM_TRADE_ENDPOINT", "tcp://127.0.0.1:5555")
 from api.config import TEMP_DIR
+
 CACHE_PATH = os.getenv("SIM_CACHE_PATH", str(TEMP_DIR / "cache_candles"))
 
 STRATEGY_ID = os.getenv("SIM_STRATEGY_ID")
@@ -45,7 +46,6 @@ if not logger.handlers:
 # Indicators exposure
 # -------------------------------------------------
 
-from Indicators.Main import indicators as indicators
 
 INTERVAL_TO_DELTA = {
     "1m": timedelta(minutes=1),
@@ -143,7 +143,7 @@ class prices:
             logger.warning(f"No candle for {symbol}")
             return _error("NO_DATA")
 
-        ts = candle.get("timestamp")
+        candle.get("timestamp")
         # Stale data check removed as requested
         return _ok(candle)
 

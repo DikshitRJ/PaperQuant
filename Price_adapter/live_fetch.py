@@ -7,7 +7,8 @@ from diskcache import Cache
 
 
 def init_cache():
-    import os, sys
+    import os
+    import sys
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from api.config import LIVE_PRICES_CACHE_PATH
     return Cache(str(LIVE_PRICES_CACHE_PATH), timeout=30)

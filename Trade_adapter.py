@@ -14,8 +14,11 @@ from diskcache import Cache
 
 ZMQ_BIND_ENDPOINT = os.getenv("SIM_TRADE_BIND_ENDPOINT", "tcp://127.0.0.1:5555")
 import sys
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from api.config import STATE_CACHE_PATH as c_STATE, LIVE_PRICES_CACHE_PATH as c_LIVE, ORDER_HISTORY_PATH as c_ORDER
+from api.config import LIVE_PRICES_CACHE_PATH as c_LIVE
+from api.config import ORDER_HISTORY_PATH as c_ORDER
+from api.config import STATE_CACHE_PATH as c_STATE
 
 STATE_CACHE_PATH = os.getenv("SIM_STATE_CACHE_PATH", str(c_STATE))
 LIVEPRICES_CACHE_PATH = os.getenv(
@@ -203,7 +206,6 @@ def main():
     logger.info("Initializing Advanced Trade Adapter...")
 
     # Ensure Temp directory exists
-    pass
 
     # Initialize Diskcache
     logger.info(f"Connecting to State Cache: {STATE_CACHE_PATH}")
@@ -394,14 +396,13 @@ def main():
                     if requested_price is not None:
                         # Limit order logic
                         can_execute_immediately = False
-                        if live_price is not None:
-                            if (
-                                action_type == "buy"
-                                and live_price <= requested_price
-                                or action_type == "sell"
-                                and live_price >= requested_price
-                            ):
-                                can_execute_immediately = True
+                        if live_price is not None and (
+                            action_type == "buy"
+                            and live_price <= requested_price
+                            or action_type == "sell"
+                            and live_price >= requested_price
+                        ):
+                            can_execute_immediately = True
 
                         if not can_execute_immediately:
                             # Queue order

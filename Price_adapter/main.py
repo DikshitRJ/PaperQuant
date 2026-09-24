@@ -30,8 +30,8 @@ async def periodic_fetch_and_store(stocklist: list[str]):
 
 
 async def main():
-    import sys
     import os
+    import sys
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from api.config import TEMP_DIR
 

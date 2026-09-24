@@ -19,7 +19,14 @@ from .stats_tracker import StatsTracker
 
 class SessionManager:
     def __init__(self, base_dir: str | Path | None = None):
-        from api.config import TEMP_DIR, STATE_CACHE_PATH, LIVE_PRICES_CACHE_PATH, ORDER_HISTORY_PATH, DATABASE_PATH, ALGORITHMS_DIR
+        from api.config import (
+            ALGORITHMS_DIR,
+            DATABASE_PATH,
+            LIVE_PRICES_CACHE_PATH,
+            ORDER_HISTORY_PATH,
+            STATE_CACHE_PATH,
+            TEMP_DIR,
+        )
         self.base_dir = Path(base_dir or Path(__file__).resolve().parents[2])
         self.temp_dir = TEMP_DIR
         self.temp_dir.mkdir(parents=True, exist_ok=True)

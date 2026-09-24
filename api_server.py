@@ -25,8 +25,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import sys
     import runpy
+    import sys
 
     if len(sys.argv) > 1:
         cmd = sys.argv[1]
@@ -35,8 +35,9 @@ if __name__ == "__main__":
             Trade_adapter.main()
             sys.exit(0)
         elif cmd == "run-price-adapter":
-            from Price_adapter import main as price_main
             import asyncio
+
+            from Price_adapter import main as price_main
             asyncio.run(price_main.main())
             sys.exit(0)
         elif cmd == "run-strategy":
