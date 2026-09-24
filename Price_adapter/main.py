@@ -30,7 +30,13 @@ async def periodic_fetch_and_store(stocklist: list[str]):
 
 
 async def main():
-    with open("./Temporary/stocklist.json", "r") as f:
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from api.config import TEMP_DIR
+
+    stocklist_path = TEMP_DIR / "stocklist.json"
+    with open(stocklist_path, "r") as f:
         stocklist: list[str] = json.load(f)
     live_task = asyncio.create_task(live_fetch_main(stocklist.copy()))
 

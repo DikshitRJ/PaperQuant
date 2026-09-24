@@ -16,7 +16,12 @@ def _normalize_timestamp(ts):
     return ts.replace(second=0, microsecond=0)
 
 
-def imt_sqlite(data, db_path="./Temporary/paperquant.db", table_name="candles"):
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from api.config import TEMP_DIR, DATABASE_PATH
+
+def imt_sqlite(data, db_path=str(DATABASE_PATH), table_name="candles"):
     conn = None
     try:
         conn = sqlite3.connect(db_path)
@@ -87,7 +92,7 @@ def imt_sqlite(data, db_path="./Temporary/paperquant.db", table_name="candles"):
 
 # ---------------- DISKCACHE ----------------
 
-cache = Cache("./Temporary/cache_candles")
+cache = Cache(str(TEMP_DIR / "cache_candles"))
 
 
 def update_diskcache_candles(ticker: str, candle_data: dict):

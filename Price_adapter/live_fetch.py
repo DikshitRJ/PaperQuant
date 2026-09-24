@@ -7,7 +7,10 @@ from diskcache import Cache
 
 
 def init_cache():
-    return Cache("./Temporary/cache_liveprices", timeout=30)
+    import os, sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from api.config import LIVE_PRICES_CACHE_PATH
+    return Cache(str(LIVE_PRICES_CACHE_PATH), timeout=30)
 
 
 import random

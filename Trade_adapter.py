@@ -13,12 +13,16 @@ from diskcache import Cache
 # -------------------------------------------------
 
 ZMQ_BIND_ENDPOINT = os.getenv("SIM_TRADE_BIND_ENDPOINT", "tcp://127.0.0.1:5555")
-STATE_CACHE_PATH = os.getenv("SIM_STATE_CACHE_PATH", "./Temporary/state")
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from api.config import STATE_CACHE_PATH as c_STATE, LIVE_PRICES_CACHE_PATH as c_LIVE, ORDER_HISTORY_PATH as c_ORDER
+
+STATE_CACHE_PATH = os.getenv("SIM_STATE_CACHE_PATH", str(c_STATE))
 LIVEPRICES_CACHE_PATH = os.getenv(
-    "SIM_LIVEPRICES_CACHE_PATH", "./Temporary/cache_liveprices"
+    "SIM_LIVEPRICES_CACHE_PATH", str(c_LIVE)
 )
 ORDER_HISTORY_FILE = os.getenv(
-    "SIM_ORDER_HISTORY_FILE", "./Temporary/order_history.csv"
+    "SIM_ORDER_HISTORY_FILE", str(c_ORDER)
 )
 
 # -------------------------------------------------
@@ -199,7 +203,7 @@ def main():
     logger.info("Initializing Advanced Trade Adapter...")
 
     # Ensure Temp directory exists
-    os.makedirs("./Temporary", exist_ok=True)
+    pass
 
     # Initialize Diskcache
     logger.info(f"Connecting to State Cache: {STATE_CACHE_PATH}")

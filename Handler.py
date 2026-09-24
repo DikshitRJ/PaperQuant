@@ -20,7 +20,8 @@ INDICATORS_DIR = os.path.join(BASE_DIR, "Indicators")
 sys.path.insert(0, INDICATORS_DIR)
 
 ZMQ_ENDPOINT = os.getenv("SIM_TRADE_ENDPOINT", "tcp://127.0.0.1:5555")
-CACHE_PATH = os.getenv("SIM_CACHE_PATH", "./Temporary/cache_candles")
+from api.config import TEMP_DIR
+CACHE_PATH = os.getenv("SIM_CACHE_PATH", str(TEMP_DIR / "cache_candles"))
 
 STRATEGY_ID = os.getenv("SIM_STRATEGY_ID")
 SYMBOL = os.getenv("SIM_SYMBOL")

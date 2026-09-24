@@ -132,3 +132,28 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
+/**
+ * Wait for the backend sidecar to start and become healthy.
+ * Polls window.__PAPERQUANT_PORT__ and /api/health every 500ms.
+ * Used as a startup gate when running inside Tauri.
+ */
+export async function waitForBackend(timeoutMs: number = 30000): Promise<void> {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const port = (window as any).__PAPERQUANT_PORT__
+        || import.meta.env.VITE_API_PORT;
+      if (port) {
+        const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+        if (response.ok) return;
+      }
+    } catch {
+      // Not ready yet
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  throw new Error('Backend did not start within timeout');
+}

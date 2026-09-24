@@ -25,4 +25,24 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import sys
+    import runpy
+
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1]
+        if cmd == "run-trade-adapter":
+            import Trade_adapter
+            Trade_adapter.main()
+            sys.exit(0)
+        elif cmd == "run-price-adapter":
+            from Price_adapter import main as price_main
+            import asyncio
+            asyncio.run(price_main.main())
+            sys.exit(0)
+        elif cmd == "run-strategy":
+            if len(sys.argv) > 2:
+                script_path = sys.argv[2]
+                runpy.run_path(script_path, run_name="__main__")
+            sys.exit(0)
+            
     main()

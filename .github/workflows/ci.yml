@@ -1,59 +1,171 @@
-name: Universal CI/CD Pipeline
+name: Build & Release PaperQuant
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: ['**']
+    tags: ['v*']
   pull_request:
-    branches:
-      - main
-      - master
+    branches: ['**']
 
 jobs:
-  code-quality:
-    name: Phase 1 - Code Quality (Lint & Format)
+  # ═══════════════════════════════════════════
+  # Phase 1: Code Quality & Compilation
+  # ═══════════════════════════════════════════
+  quality:
+    name: Code Quality
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          
-      - name: Install dependencies
-        run: pip install flake8 bandit
+          python-version: '3.12'
 
-      - name: Run Flake8 (Strict Linting)
-        run: flake8 .
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: UI/Frontend/package-lock.json
 
-      - name: Run Bandit (Security Audit)
-        run: bandit -r api/ Trade_adapter.py -ll
+      - name: Install Python dependencies
+        run: |
+          pip install poetry
+          poetry install
+          pip install ruff
 
-  integration-tests:
-    name: Phase 2 - Integration Tests
-    needs: code-quality
+      - name: Python linting
+        run: ruff check .
+
+      - name: Install frontend dependencies
+        run: cd UI/Frontend && npm ci
+
+      - name: TypeScript type checking
+        run: cd UI/Frontend && npx tsc --noEmit
+
+      - name: Frontend linting
+        run: cd UI/Frontend && npm run lint
+
+      - name: Frontend build
+        run: cd UI/Frontend && npm run build
+
+  # ═══════════════════════════════════════════
+  # Phase 2: Integration Tests
+  # ═══════════════════════════════════════════
+  test:
+    name: Tests
+    needs: quality
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
           pip install poetry
           poetry install
-          pip install httpx pytest
+          pip install pytest pytest-asyncio httpx
 
-      - name: Run Integration Tests
+      - name: Run backend tests
         env:
           PYTHONPATH: .
+        run: python -m pytest tests/ -v --tb=short
+
+  # ═══════════════════════════════════════════
+  # Phase 3: Build Desktop App (on tags only)
+  # ═══════════════════════════════════════════
+  build-sidecar:
+    name: Build Python Sidecar (${{ matrix.os }})
+    needs: [quality, test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
         run: |
-          poetry run pytest tests/ -v
+          pip install poetry pyinstaller
+          poetry install
+
+      - name: Build sidecar
+        run: python scripts/build-sidecar.py
+
+      - name: Upload sidecar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-${{ matrix.target }}
+          path: src-tauri/binaries/paperquant-server-*
+
+  build-tauri:
+    name: Build Tauri App (${{ matrix.os }})
+    needs: build-sidecar
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Download sidecar artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sidecar-${{ matrix.target }}
+          path: src-tauri/binaries/
+
+      - name: Make sidecar executable
+        if: runner.os != 'Windows'
+        run: chmod +x src-tauri/binaries/paperquant-server-*
+
+      - name: Install frontend dependencies
+        run: cd UI/Frontend && npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'PaperQuant ${{ github.ref_name }}'
+          releaseBody: 'See the assets for download links.'
+          releaseDraft: true
+          prerelease: false

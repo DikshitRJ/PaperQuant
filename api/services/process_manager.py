@@ -47,14 +47,16 @@ class ProcessManager:
         return True
 
     def start_price_adapter(self) -> bool:
+        cmd = [sys.executable, "run-price-adapter"] if getattr(sys, "frozen", False) else [sys.executable, "main.py"]
         return self.start_process(
             "price_adapter",
-            [sys.executable, "main.py"],
-            self.base_dir / "Price_adapter",
+            cmd,
+            self.base_dir / "Price_adapter" if not getattr(sys, "frozen", False) else self.base_dir,
         )
 
     def start_trade_adapter(self) -> bool:
-        return self.start_process("trade_adapter", [sys.executable, "Trade_adapter.py"])
+        cmd = [sys.executable, "run-trade-adapter"] if getattr(sys, "frozen", False) else [sys.executable, "Trade_adapter.py"]
+        return self.start_process("trade_adapter", cmd)
 
     def start_strategy(
         self,
@@ -63,15 +65,17 @@ class ProcessManager:
         symbol: str,
         trade_endpoint: str = "tcp://127.0.0.1:5555",
     ) -> bool:
+        from api.config import TEMP_DIR
         env = {
             "SIM_STRATEGY_ID": strategy_id,
             "SIM_SYMBOL": symbol,
             "SIM_TRADE_ENDPOINT": trade_endpoint,
-            "SIM_CACHE_PATH": str(self.base_dir / "Temporary" / "cache_candles"),
+            "SIM_CACHE_PATH": str(TEMP_DIR / "cache_candles"),
         }
+        cmd = [sys.executable, "run-strategy", str(script_path)] if getattr(sys, "frozen", False) else [sys.executable, str(script_path)]
         return self.start_process(
             f"strategy_{strategy_id}_{symbol}",
-            [sys.executable, str(script_path)],
+            cmd,
             env=env,
         )
 

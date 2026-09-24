@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RotateCcw, Octagon, TrendingUp, Wallet, Activity, Clock } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { StatCard } from './components/StatCard';
@@ -8,13 +8,21 @@ import SetupView from './components/SetupView';
 import HomeView from './components/HomeView';
 import AlgorithmsView from './components/AlgorithmsView';
 import SettingsView from './components/SettingsView';
-import { apiClient } from './lib/api-client';
+import { apiClient, waitForBackend } from './lib/api-client';
 import { usePaperQuant } from './context/PaperQuantContext';
 import type { SessionStartRequest } from './types/api';
 
 function App() {
   const [view, setView] = useState('home'); 
+  const [backendReady, setBackendReady] = useState(false);
+  const [startupError, setStartupError] = useState<string | null>(null);
   const { strategyName, stats } = usePaperQuant();
+
+  useEffect(() => {
+    waitForBackend()
+      .then(() => setBackendReady(true))
+      .catch((e) => setStartupError(e.message));
+  }, []);
 
   const handleStartSession = async (config: SessionStartRequest) => {
     try {
@@ -43,6 +51,23 @@ function App() {
   };
 
   return (
+    <>
+      {startupError ? (
+        <div className="flex items-center justify-center h-screen w-screen bg-black text-red-400 font-mono text-center p-8">
+          <div>
+            <p className="text-xl mb-2">Failed to start PaperQuant</p>
+            <p className="text-sm text-neutral-500">{startupError}</p>
+          </div>
+        </div>
+      ) : !backendReady ? (
+        <div className="flex items-center justify-center h-screen w-screen bg-black text-slate-300 font-mono">
+          <div className="text-center">
+            <div className="size-8 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-lg">Starting PaperQuant...</p>
+            <p className="text-xs text-neutral-500 mt-1">Launching backend engine</p>
+          </div>
+        </div>
+      ) : (
     <div className="flex h-screen bg-black w-screen overflow-hidden text-slate-200 selection:bg-white/20 relative">
       {/* Subtle Background Gradient */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_#1a1a1a_0%,_#000000_100%)] pointer-events-none" />
@@ -120,6 +145,8 @@ function App() {
         )}
       </main>
     </div>
+      )}
+    </>
   );
 }
 
